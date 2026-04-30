@@ -1,0 +1,264 @@
+program           -> algorithm_header
+                     type_section?
+                     constant_section?
+                     function_section*
+                     method_section*
+                     var_section?
+                     block
+
+algorithm_header  -> ("Algorithme" | "Algorithm") ":" IDENTIFIER ";"
+
+type_section      -> ("Type" | "Type") ":" type_decl+
+type_decl         -> ("Structure" | "Structure") IDENTIFIER
+                     field_list
+                     ("FinStruct" | "EndStruct")
+field_list        -> field_decl+
+field_decl        -> IDENTIFIER ":" type ";"
+
+constant_section  -> ("Constante" | "Constant") ":" const_decl+
+const_decl        -> IDENTIFIER "=" literal ";"
+
+function_section  -> ("Fonction" | "Function") ":" IDENTIFIER
+                     "(" param_list? ")" ":" type ";"
+                     var_section?
+                     statement*
+                     ("FinFonction" | "EndFunction") ";"
+
+method_section    -> ("Methode" | "Method") ":" IDENTIFIER
+                     "(" param_list? ")" ":"
+                     var_section?
+                     statement*
+                     ("FinMethode" | "EndMethod") ";"
+
+param_list        -> param ("," param)*
+param             -> IDENTIFIER ":" type
+
+var_section       -> ("Variables" | "Variables") ":" var_list
+var_list          -> var_decl+
+var_decl          -> IDENTIFIER ("," IDENTIFIER)* ":" type ";"
+
+type              -> primitive_type | array_type | struct_type
+
+primitive_type    -> ("entier" | "integer")
+                   | ("reel" | "real")
+                   | ("chaine_charactere" | "string")
+                   | ("caractere" | "char")
+                   | ("booleen" | "boolean")
+                   | ("nombre" | "number")  // Generic number type
+
+array_type        -> ("tableau" | "array") "[" range "]" ("de" | "of") type
+range             -> INTEGER ".." INTEGER
+
+struct_type       -> IDENTIFIER  // Reference to a declared structure
+
+block             -> ("Debut" | "Begin") ":" statement* ("Fin" | "End")
+
+statement         -> expression_stmt
+                   | write_stmt
+                   | read_stmt
+                   | assignment_stmt
+                   | if_stmt
+                   | while_stmt
+                   | do_while_stmt
+                   | for_stmt
+                   | return_stmt
+                   | method_call_stmt
+
+expression_stmt   -> expression ";"
+
+write_stmt        -> ("ecrire" | "write") "(" expression ("," expression)* ")" ";"
+
+read_stmt         -> ("lire" | "read") "(" lvalue ")" ";"
+
+assignment_stmt   -> lvalue "<-" expression ";"
+
+return_stmt       -> ("retourne" | "return") expression ";"
+
+method_call_stmt  -> IDENTIFIER "(" argument_list? ")" ";"
+
+if_stmt           -> ("si" | "if") expression
+                     ("alors" | "then") ":"
+                     statement*
+                     elseif_clause*
+                     else_clause?
+                     ("finsi" | "endif")
+
+elseif_clause     -> ("sinon si" | "else if") expression
+                     ("alors" | "then") ":"
+                     statement*
+
+else_clause       -> ("sinon" | "else") ":" statement*
+
+while_stmt        -> ("tant_que" | "while") "(" expression ")"
+                     ("faire" | "do") ":"
+                     statement*
+                     ("fintantque" | "endwhile")
+
+do_while_stmt     -> ("repeter" | "repeat") ":"
+                     statement*
+                     ("jusqu_a" | "until") "(" expression ")" ";"
+
+for_stmt          -> ("pour" | "for") IDENTIFIER
+                     ("<-" | "=") expression
+                     ("jusqu_a" | "to") expression
+                     ("pas" | "step" expression)?
+                     ("faire" | "do") ":"
+                     statement*
+                     ("finpour" | "endfor")
+
+expression        -> logical_or
+
+logical_or        -> logical_and (("ou" | "or") logical_and)*
+
+logical_and       -> equality (("et" | "and") equality)*
+
+equality          -> comparison (("!=" | "==") comparison)*
+
+comparison        -> term ((">" | ">=" | "<" | "<=") term)*
+
+term              -> factor (("-" | "+") factor)*
+
+factor            -> unary (("/" | "*" | ("mod" | "mod")) unary)*
+
+unary             -> ("!" | "-" | ("non" | "not")) unary | call
+
+call              -> primary ( "(" argument_list? ")" | "." IDENTIFIER | "[" expression "]" )*
+
+primary           -> NUMBER
+                   | STRING
+                   | CHAR
+                   | ("vrai" | "true")
+                   | ("faux" | "false")
+                   | ("nil" | "null")
+                   | IDENTIFIER
+                   | "(" expression ")"
+
+lvalue            -> IDENTIFIER
+                   | lvalue "." IDENTIFIER      // struct field access
+                   | lvalue "[" expression "]"  // array element access
+
+argument_list     -> expression ("," expression)*
+
+literal           -> NUMBER | STRING | CHAR | BOOLEAN
+
+NUMBER            -> INTEGER_LITERAL | DOUBLE_LITERAL
+STRING            -> STRING_LITERAL
+CHAR              -> CHARACTER_LITERAL
+BOOLEAN           -> ("vrai" | "true" | "faux" | "false")
+
+IDENTIFIER        -> [a-zA-Z_][a-zA-Z0-9_]*
+INTEGER_LITERAL   -> [0-9]+
+DOUBLE_LITERAL    -> [0-9]+("," | ".")[0-9]+  // , for French, . for English
+STRING_LITERAL    -> '"' [^"]* '"'
+CHARACTER_LITERAL -> "'" . "'"
+
+# KEYWORDS (French)
+French Keywords:
+  - Control: si, alors, sinon, finsi, tant_que, faire, fintantque,
+             repeter, jusqu_a, pour, finpour, pas
+  - Types: entier, reel, chaine_charactere, caractere, booleen,
+           tableau, nombre, Structure, FinStruct
+  - Declarations: Algorithme, Variables, Constante, Type
+  - Functions: Fonction, FinFonction, Methode, FinMethode, retourne
+  - I/O: ecrire, lire
+  - Block: Debut, Fin
+  - Logical: et, ou, non
+  - Boolean: vrai, faux
+  - Operators: mod
+
+# KEYWORDS (English)
+English Keywords:
+  - Control: if, then, else, endif, while, do, endwhile,
+             repeat, until, for, endfor, step
+  - Types: integer, real, string, char, boolean,
+           array, number, Structure, EndStruct
+  - Declarations: Algorithm, Variables, Constant, Type
+  - Functions: Function, EndFunction, Method, EndMethod, return
+  - I/O: write, read
+  - Block: Begin, End
+  - Logical: and, or, not
+  - Boolean: true, false
+  - Operators: mod
+
+# OPERATORS
+Arithmetic:  +  -  *  /  mod
+Comparison:  <  <=  >  >=  ==  !=
+Logical:     et/and  ou/or  non/not  !
+Assignment:  <-
+Access:      .  []
+
+# COMMENTS
+Single-line: // comment text
+Multi-line:  /* comment text */
+
+# SPECIAL NOTES
+1. Decimal separator:
+   - French: comma (,)  e.g., 3,14
+   - English: dot (.)   e.g., 3.14
+
+2. Array indices start at the specified lower bound (e.g., 1..10)
+
+3. Structures can contain:
+   - Primitive types
+   - Arrays
+   - Other structures (nested)
+
+4. Functions must return a value
+   Methods do not return values
+
+5. Parameters are passed by value by default
+
+6. Case sensitivity: Keywords are case-insensitive
+                     Identifiers are case-sensitive
+
+# EXAMPLE PROGRAMS
+# Example 1: Simple program with function
+Algorithme: exemple;
+Variables:
+    x : entier;
+Debut:
+    x <- 5;
+    ecrire("x = " + x);
+Fin
+
+# Example 2: With structures
+Algorithme: structures;
+Type:
+    Structure Personne
+        nom : chaine_charactere;
+        age : entier;
+    FinStruct
+Variables:
+    p : Personne;
+Debut:
+    p.nom <- "Alice";
+    p.age <- 25;
+    ecrire(p.nom);
+Fin
+
+# Example 3: With arrays and loops
+Algorithme: tableaux;
+Variables:
+    notes : tableau[1..5] de reel;
+    i : entier;
+Debut:
+    pour i <- 1 jusqu_a 5 faire:
+        ecrire("Note " + i + ": ");
+        lire(notes[i]);
+    finpour
+Fin
+
+# Example 4: With functions
+Algorithme: fonctions;
+
+Fonction: carre(x: entier): entier;
+    retourne x * x;
+FinFonction;
+
+Variables:
+    n : entier;
+Debut:
+    n <- 5;
+    ecrire("Le carré de " + n + " est " + carre(n));
+Fin
+
