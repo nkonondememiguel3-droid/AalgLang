@@ -1,19 +1,24 @@
 package lexer
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type tokenType int
 
 const (
 	// Single character tokens
-	DOT tokenType = iota
+	COLON tokenType = iota
 	COMMA
 	SEMICOLON
 	LEFT_PAREN
 	RIGHT_PAREN
-	LEFT_BRACE
-	RIGHT_BRACE
+	LEFT_CURLY_BRACE
+	RIGHT_CURLY_BRACE
+	LEFT_SQUARE_BRACE
+	RIGHT_SQUARE_BRACE
 	BANG
+	PERCENT
 
 	// One or two character tokens
 	LESS
@@ -32,6 +37,7 @@ const (
 	STAR_STAR
 	EQUAL
 	EQUAL_EQUAL
+	DOT
 	DOT_DOT
 
 	// Literals
@@ -84,6 +90,7 @@ const (
 	ENDWHILE
 	REPEAT
 	UNTIL
+	ENDUNTIL
 
 	// Logical operators
 	AND
@@ -111,129 +118,196 @@ const (
 type Token struct {
 	TokenType tokenType
 	Lexeme    string
-	Value     string
-	Line      string
+	Value     any
+	Line      int
 }
 
 func (token Token) Help() {
-	if token.TokenType == STRING || token.TokenType == DOUBLE || token.TokenType == BOOLEAN || token.TokenType == DOUBLE || token.TokenType == IDENTIFIER || token.TokenType == TYPE {
+	if token.TokenType == STRING || token.TokenType == BOOLEAN || token.TokenType == DOUBLE || token.TokenType == IDENTIFIER || token.TokenType == TYPE {
 		fmt.Printf("%s(%s)\n", TokenKindString(token.TokenType), token.Value)
 	} else {
 		fmt.Printf("%s()\n", TokenKindString(token.TokenType))
 	}
 }
 
-// func GetNewToken(k TokenKind, v string) Token {
-// 	return Token{k, v}
-// }
+func GetNewToken(_type tokenType, value any, lexeme string, line int) Token {
+	return Token{
+		TokenType: _type,
+		Lexeme:    lexeme,
+		Value:     value,
+		Line:      line,
+	}
+}
 
-// func TokenKindString(tKind TokenKind) string {
-// 	switch tKind {
-// 	case EOF:
-// 		return "EOF"
-// 	case STRING:
-// 		return "STRING"
-// 	case CHAR:
-// 		return "CHAR"
-// 	case INT:
-// 		return "INT"
-// 	case FLOAT:
-// 		return "FLOAT"
-// 	case BOOL:
-// 		return "BOOL"
-// 	case TYPE:
-// 		return "TYPE"
-// 	case IDENTIFIER:
-// 		return "IDENTIFIER"
-// 	case OPEN_BRACKET:
-// 		return "OPEN_BRACKET"
-// 	case CLOSE_BRACKET:
-// 		return "CLOSE_BRACKET"
-// 	case OPEN_SQUARE_BRACKET:
-// 		return "OPEN_SQUARE_BRACKET"
-// 	case CLOSE_SQUARE_BRACKET:
-// 		return "CLOSE_SQUARE_BRACKET"
-// 	case OPEN_CURLY_BRACKET:
-// 		return "OPEN_CURLY_BRACKET"
-// 	case CLOSE_CURLY_BRACKET:
-// 		return "CLOSE_CURLY_BRACKET"
-// 	case LESS_THAN:
-// 		return "LESS_THAN"
-// 	case GREATER_THAN:
-// 		return "GREATER_THAN"
-// 	case LESS_THAN_EQUAL:
-// 		return "LESS_THAN_EQUAL"
-// 	case GREATER_THAN_EQUAL:
-// 		return "GREATER_THAN_EQUAL"
-// 	case EQUAL_ASSIGN:
-// 		return "EQUAL_ASSIGN"
-// 	case DOUBLE_EQUAL:
-// 		return "DOUBLE_EQUAL"
-// 	case NOT:
-// 		return "NOT"
-// 	case NOT_EQUAL:
-// 		return "NOT_EQUAL"
-// 	case PLUS:
-// 		return "PLUS"
-// 	case DASH:
-// 		return "DASH"
-// 	case STAR:
-// 		return "STAR"
-// 	case SLASH:
-// 		return "SLASH"
-// 	case PERCENT:
-// 		return "PERCENT"
-// 	case PLUS_PLUS:
-// 		return "PLUS_PLUS"
-// 	case PLUS_EQUAL:
-// 		return "PLUS_EQUAL"
-// 	case MINUS_MINUS:
-// 		return "MINUS_MINUS"
-// 	case MINUS_EQUAL:
-// 		return "MINUS_EQUAL"
-// 	case STAR_EQUAL:
-// 		return "STAR_EQUAL"
-// 	case SLASH_EQUAL:
-// 		return "SLASH_EQUAL"
-// 	case PERCENT_EQUAL:
-// 		return "PERCENT_EQUAL"
-// 	case COLON:
-// 		return "COLON"
-// 	case SEMI_COLON:
-// 		return "SEMI_COLON"
-// 	case COMMA:
-// 		return "COMMA"
-// 	case AND:
-// 		return "AND"
-// 	case OR:
-// 		return "OR"
-// 	case AND_AND:
-// 		return "AND_AND"
-// 	case OR_OR:
-// 		return "OR_OR"
-// 	case VAR:
-// 		return "VAR"
-// 	case CONST:
-// 		return "CONST"
-// 	case FUN:
-// 		return "FUN"
-// 	case IF:
-// 		return "IF"
-// 	case ELSE:
-// 		return "ELSE"
-// 	case ELSE_IF:
-// 		return "ELSE_IF"
-// 	case FOR:
-// 		return "FOR"
-// 	case WHILE:
-// 		return "WHILE"
-// 	case RETURN:
-// 		return "RETURN"
-// 	case CONTINUE:
-// 		return "CONTINUE"
-// 	case BREAK:
-// 		return "BREAK"
-// 	default:
-// 		return fmt.Sprintf("unknown(%d)", tKind)
-// 	}
-// }
+func TokenKindString(tKind tokenType) string {
+	switch tKind {
+
+	case DOT:
+		return "DOT"
+	case COLON:
+		return "COLON"
+	case SEMICOLON:
+		return "SEMICOLON"
+	case LEFT_PAREN:
+		return "LEFT_PAREN"
+	case RIGHT_PAREN:
+		return "RIGHT_PAREN"
+	case LEFT_CURLY_BRACE:
+		return "LEFT_CURLY_BRACE"
+	case RIGHT_CURLY_BRACE:
+		return "RIGHT_CURLY_BRACE"
+	case BANG:
+		return "BANG"
+	case PERCENT:
+		return "PERCENT"
+
+	case LESS:
+		return "LESS"
+	case LESS_OR_EQUAL:
+		return "LESS_OR_EQUAL"
+	case DIFF:
+		return "DIFF"
+	case ASSIGN:
+		return "ASSIGN"
+	case GREATER:
+		return "GREATER"
+	case GREATER_OR_EQUAL:
+		return "GREATER_OR_EQUAL"
+	case MINUS:
+		return "MINUS"
+	case MINUS_MINUS:
+		return "MINUS_MINUS"
+	case PLUS:
+		return "PLUS"
+	case PLUS_PLUS:
+		return "PLUS_PLUS"
+	case SLASH:
+		return "SLASH"
+	case SLASH_SLASH:
+		return "SLAHS_SLAHS"
+	case STAR:
+		return "STAR"
+	case STAR_STAR:
+		return "STAR_STAR"
+	case EQUAL:
+		return "EQUAL"
+	case EQUAL_EQUAL:
+		return "EQUAL_EQUAL"
+	case DOT_DOT:
+		return "DOT_DOT"
+
+	case IDENTIFIER:
+		return "IDENTIFIER"
+	case INTEGER_LITERAL:
+		return "INTEGER_LITERAL"
+	case DOUBLE_LITERAL:
+		return "DOUBLE_LITERAL"
+	case STRING_LITERAL:
+		return "STRING_LITERAL"
+	case CHARACTER_LITERAL:
+		return "CHARACTER_LITERAL"
+
+	case INTEGER:
+		return "INTEGER"
+	case DOUBLE:
+		return "DOUBLE"
+	case STRING:
+		return "STRING"
+	case CHARACTER:
+		return "CHARACTER"
+	case NUMBER:
+		return "NUMBER"
+	case TABLE:
+		return "TABLE"
+
+	case ALGORITHM:
+		return "ALGORITHM"
+	case VARIABLE:
+		return "VARIABLE"
+	case CONSTANT:
+		return "CONSTANT"
+	case TYPE:
+		return "TYPE"
+	case BEGIN:
+		return "BEGIN"
+	case END:
+		return "END"
+
+	case FUNCTION:
+		return "FUNCTION"
+	case END_FUNCTION:
+		return "END_FUNCTION"
+	case METHOD:
+		return "METHOD"
+	case END_METHOD:
+		return "END_METHOD"
+	case RETURN:
+		return "RETURN"
+
+	case STRUCTURE:
+		return "STRUCTURE"
+	case END_STRUCTURE:
+		return "END_STRUCTURE"
+
+	case IF:
+		return "IF"
+	case THEN:
+		return "THEN"
+	case ELSE:
+		return "ELSE"
+	case ELIF:
+		return "ELIF"
+	case ENDIF:
+		return "ENDIF"
+	case FOR:
+		return "FOR"
+	case ENDFOR:
+		return "ENDFOR"
+	case TO:
+		return "TO"
+	case STEP:
+		return "STEP"
+	case WHILE:
+		return "WHILE"
+	case ENDWHILE:
+		return "ENDWHILE"
+	case REPEAT:
+		return "REPEAT"
+	case UNTIL:
+		return "UNTIL"
+	case ENDUNTIL:
+		return "ENDUNTIL"
+
+	case AND:
+		return "AND"
+	case OR:
+		return "OR"
+	case NOT:
+		return "NOT"
+
+	case WRITE:
+		return "WRITE"
+	case READ:
+		return "READ"
+
+	case TRUE:
+		return "TRUE"
+	case FALSE:
+		return "FALSE"
+
+	case NIL:
+		return "NIL"
+	case CLASS:
+		return "CLASS"
+	case MOD:
+		return "MOD"
+	case OF:
+		return "OF"
+
+	case EOF:
+		return "EOF"
+
+	default:
+		return fmt.Sprintf("Unknow token. %v", tKind)
+	}
+}

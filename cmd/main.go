@@ -1,7 +1,7 @@
 package main
 
 import (
-	"algLang/repl"
+	"algLang/src/repl"
 	"fmt"
 	"os"
 )
