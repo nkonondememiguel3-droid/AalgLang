@@ -1,0 +1,245 @@
+================================================================================
+  ALGLANG — PROJECT DIRECTORY STRUCTURE
+  Version 1.0.0
+================================================================================
+
+alglang/
+│
+├── CMakeLists.txt                        # Root build file
+├── CMakePresets.json                     # Debug / Release / Sanitizer presets
+├── .clang-format                         # Code style (K&R / Linux kernel style)
+├── .clang-tidy                           # Static analysis config
+├── .gitignore
+├── .gitattributes
+├── README.md
+├── LICENSE
+│
+├── cmake/                                # CMake helper modules
+│   ├── AlgLangVersion.cmake              # Version extraction from git tags
+│   ├── CompilerWarnings.cmake            # Strict warning flags per compiler
+│   ├── Sanitizers.cmake                  # ASAN / UBSAN / TSAN configuration
+│   ├── Coverage.cmake                    # gcov / llvm-cov integration
+│   ├── FindRaylib.cmake                  # Raylib find module (if not using FetchContent)
+│   └── Dependencies.cmake               # All FetchContent / find_package calls
+│
+├── include/                              # Public headers (installed with the library)
+│   └── alglang/
+│       ├── alglang.h                     # Single umbrella public header
+│       ├── version.h                     # Generated: ALGLANG_VERSION_MAJOR/MINOR/PATCH
+│       └── api.h                         # Public C API (for embedding alglang)
+│
+├── src/                                  # All implementation source
+│   │
+│   ├── core/                             # Language pipeline
+│   │   ├── CMakeLists.txt
+│   │   ├── lexer.h
+│   │   ├── lexer.c                       # Tokenizer (language-agnostic via keyword table)
+│   │   ├── token.h                       # Token struct + TokenType enum
+│   │   ├── parser.h
+│   │   ├── parser.c                      # Recursive-descent parser -> AST
+│   │   ├── ast.h                         # ASTNode union + NodeType enum
+│   │   ├── ast.c                         # AST constructors + arena allocation
+│   │   ├── ast_printer.h
+│   │   ├── ast_printer.c                 # Debug: print AST as indented tree
+│   │   ├── types.h                       # Type struct + TypeKind enum
+│   │   ├── types.c                       # Type interning + type_equals / assignable
+│   │   ├── symbol.h                      # Symbol + SymbolTable
+│   │   ├── symbol.c                      # Scoped symbol table (push/pop/lookup)
+│   │   ├── typechecker.h
+│   │   ├── typechecker.c                 # Full static type checker
+│   │   ├── module.h
+│   │   ├── module.c                      # Module loader, dep graph, topo sort
+│   │   ├── compiler.h
+│   │   ├── compiler.c                    # AST -> bytecode chunk
+│   │   ├── chunk.h                       # Bytecode chunk + constant pool
+│   │   ├── chunk.c
+│   │   ├── opcode.h                      # OpCode enum + instruction encoding
+│   │   ├── disassembler.h
+│   │   ├── disassembler.c                # Human-readable bytecode dump
+│   │   └── vm.h
+│   │   └── vm.c                          # Register-based virtual machine
+│   │
+│   ├── runtime/                          # Heap, GC, and value system
+│   │   ├── CMakeLists.txt
+│   │   ├── value.h                       # Value tagged union + Object header
+│   │   ├── value.c
+│   │   ├── gc.h                          # Tri-color mark-and-sweep GC
+│   │   ├── gc.c
+│   │   ├── string_obj.h                  # ObjString: interned, hashed
+│   │   ├── string_obj.c
+│   │   ├── array_obj.h                   # ObjArray: dynamic, GC-managed
+│   │   ├── array_obj.c
+│   │   ├── struct_obj.h                  # ObjStruct: field map, GC-managed
+│   │   ├── struct_obj.c
+│   │   ├── closure_obj.h                 # ObjClosure + ObjUpvalue
+│   │   ├── closure_obj.c
+│   │   ├── native_obj.h                  # ObjNative: C function wrapper
+│   │   ├── native_obj.c
+│   │   ├── table.h                       # Open-addressed hash table
+│   │   ├── table.c
+│   │   ├── arena.h                       # Arena allocator (for AST nodes)
+│   │   └── arena.c
+│   │
+│   ├── builtins/                         # Native standard library functions
+│   │   ├── CMakeLists.txt
+│   │   ├── builtins.h                    # Registration interface
+│   │   ├── builtins.c                    # Loader: registers all stdlib functions
+│   │   ├── builtin_math.c               # abs, sqrt, pow, sin, cos, random ...
+│   │   ├── builtin_string.c             # str_length, str_concat, str_split ...
+│   │   ├── builtin_io.c                 # write, read (console I/O)
+│   │   ├── builtin_file.c               # file_open, file_close, file_read_line ...
+│   │   ├── builtin_net.c                # net_connect, net_send, http_get ...
+│   │   └── builtin_sys.c               # sys_exit, sys_time, sys_args ...
+│   │
+│   ├── graphics/                         # Raylib graphics module
+│   │   ├── CMakeLists.txt
+│   │   ├── gfx_module.h
+│   │   ├── gfx_module.c                  # All raylib native function wrappers
+│   │   ├── gfx_registry.h
+│   │   └── gfx_registry.c               # Registers gfx functions under localized names
+│   │
+│   ├── i18n/                             # Internationalization / keyword system
+│   │   ├── CMakeLists.txt
+│   │   ├── lang_loader.h
+│   │   ├── lang_loader.c                 # .lang file parser + LangTable builder
+│   │   ├── keyword_table.h               # Runtime keyword map (logical -> surface)
+│   │   └── keyword_table.c
+│   │
+│   ├── diagnostics/                      # Error reporting engine
+│   │   ├── CMakeLists.txt
+│   │   ├── diag.h                        # Diagnostic struct + DiagEngine API
+│   │   ├── diag.c                        # Rendering engine (color, source context)
+│   │   ├── diag_codes.h                  # E001–F005 + W001–W009 constants
+│   │   └── ansi.h                        # ANSI color code constants
+│   │
+│   └── main.c                            # CLI entry point (arg parsing -> pipeline)
+│
+├── languages/                            # .lang keyword configuration files
+│   ├── en.lang                           # English keywords
+│   ├── fr.lang                           # French keywords
+│   ├── de.lang                           # German keywords (template)
+│   └── es.lang                           # Spanish keywords (template)
+│
+├── stdlib/                               # Standard library written in AlgLang itself
+│   ├── math.alg
+│   ├── string.alg
+│   └── io.alg
+│
+├── tests/                                # All tests (Criterion framework)
+│   ├── CMakeLists.txt
+│   │
+│   ├── unit/                             # Unit tests per module
+│   │   ├── test_lexer.c
+│   │   ├── test_parser.c
+│   │   ├── test_typechecker.c
+│   │   ├── test_types.c
+│   │   ├── test_symbol_table.c
+│   │   ├── test_compiler.c
+│   │   ├── test_vm.c
+│   │   ├── test_gc.c
+│   │   ├── test_string_obj.c
+│   │   ├── test_table.c
+│   │   ├── test_lang_loader.c
+│   │   ├── test_module_loader.c
+│   │   ├── test_builtins_math.c
+│   │   ├── test_builtins_string.c
+│   │   ├── test_builtins_file.c
+│   │   ├── test_builtins_net.c
+│   │   └── test_diagnostics.c
+│   │
+│   ├── integration/                      # End-to-end: compile + run .alg programs
+│   │   ├── test_programs.c               # Runs each .alg file and checks output
+│   │   ├── programs/                     # Test .alg source files
+│   │   │   ├── hello_world.alg
+│   │   │   ├── factorial.alg
+│   │   │   ├── fibonacci.alg
+│   │   │   ├── structs.alg
+│   │   │   ├── arrays.alg
+│   │   │   ├── multi_file/
+│   │   │   │   ├── main.alg
+│   │   │   │   └── utils.alg
+│   │   │   ├── file_io.alg
+│   │   │   └── type_errors/              # Programs that SHOULD fail type checking
+│   │   │       ├── mismatch_assign.alg
+│   │   │       ├── missing_return.alg
+│   │   │       └── undefined_var.alg
+│   │   └── expected/                     # Expected stdout for each program
+│   │       ├── hello_world.expected
+│   │       ├── factorial.expected
+│   │       └── ...
+│   │
+│   └── fixtures/                         # Shared test helpers
+│       ├── test_helpers.h
+│       └── test_helpers.c
+│
+├── tools/                                # Developer tools
+│   ├── alglang-dis/                      # Standalone disassembler tool
+│   │   ├── CMakeLists.txt
+│   │   └── main.c
+│   ├── alglang-fmt/                      # Source formatter (future)
+│   │   └── CMakeLists.txt
+│   └── gen_lang_template/               # Tool to generate .lang template from en.lang
+│       ├── CMakeLists.txt
+│       └── main.c
+│
+├── docs/                                 # Documentation
+│   ├── grammar.txt                       # This grammar file
+│   ├── typechecker_rules.txt
+│   ├── error_reporting.txt
+│   ├── bytecode_format.md
+│   ├── vm_architecture.md
+│   ├── gc_design.md
+│   └── contributing.md
+│
+├── examples/                             # Example AlgLang programs
+│   ├── fr/
+│   │   ├── bonjour_monde.alg
+│   │   ├── tri_bulles.alg
+│   │   └── cercle_animation.alg
+│   └── en/
+│       ├── hello_world.alg
+│       ├── bubble_sort.alg
+│       └── circle_animation.alg
+│
+└── third_party/                          # Vendored or FetchContent dependencies
+    └── (managed by CMake FetchContent — not committed to git)
+
+================================================================================
+  KEY DESIGN NOTES
+================================================================================
+
+  1. src/core/       — Zero dependencies on runtime/ or builtins/.
+                       Can be tested in isolation.
+
+  2. src/runtime/    — Depends on core/ for types only.
+                       The GC knows nothing about the VM internals.
+
+  3. src/builtins/   — Depends on runtime/ and diagnostics/ only.
+                       Each builtin_X.c is a standalone translation unit.
+
+  4. src/graphics/   — Compiled only when BUILD_GRAPHICS=ON.
+                       No other module depends on graphics/.
+
+  5. src/i18n/       — Zero dependencies. Loaded first. Used by all modules.
+
+  6. src/diagnostics/ — Zero dependencies. Used by all modules.
+
+  7. tests/          — Links against the alglang_core static library.
+                       Each test_X.c maps 1:1 to a source module.
+
+  8. Arena allocator — AST nodes are allocated from an arena (arena.h).
+                       The entire AST is freed in one arena_free() call
+                       after compilation, before the VM starts.
+
+================================================================================
+  BUILD ARTIFACTS
+================================================================================
+
+  libalglang_core.a     — Static library (core + runtime + builtins + i18n)
+  alglang               — Main CLI executable
+  alglang-dis           — Disassembler CLI
+  alglang_tests         — Test runner (Criterion-based)
+
+================================================================================
+  END OF PROJECT STRUCTURE
+================================================================================

@@ -1,0 +1,526 @@
+================================================================================
+  ALGLANG ERROR REPORTING SYSTEM — SPECIFICATION
+  Version 1.0.0
+================================================================================
+
+  The error reporter is a standalone module (error_reporter.h / .c).
+  It is consumed by the lexer, parser, type checker, and compiler.
+  All diagnostics go through a single DiagnosticEngine — never fprintf
+  directly to stderr from other modules.
+
+================================================================================
+  SECTION 1 — DIAGNOSTIC LEVELS
+================================================================================
+
+  LEVEL_NOTE    — informational context attached to another diagnostic
+  LEVEL_WARNING — valid code but likely a bug or bad practice
+  LEVEL_ERROR   — type or semantic violation; compilation aborted after pass
+  LEVEL_FATAL   — immediate abort (file not found, OOM, internal assert)
+
+================================================================================
+  SECTION 2 — OUTPUT FORMAT (CLANG/RUST INSPIRED)
+================================================================================
+
+  Each diagnostic is rendered as a block:
+
+  ┌─── Anatomy of one diagnostic ────────────────────────────────────────────┐
+  │                                                                           │
+  │  error[E042]: type mismatch in assignment                                 │
+  │   --> src/main.alg:14:5                                                   │
+  │    |                                                                       │
+  │ 13 |      x : entier;                                                      │
+  │ 14 |      x <- 3,14;                                                       │
+  │    |      ^ expected `entier`, found `reel`                                │
+  │    |                                                                       │
+  │    = help: use an explicit cast: cast<entier>(3,14)                        │
+  │    = note: variable `x` declared as `entier` on line 13                   │
+  │                                                                           │
+  └───────────────────────────────────────────────────────────────────────────┘
+
+  Components:
+    [header]    level + error code + short message
+    [location]  file, line, column (1-indexed)
+    [context]   source lines around the error (up to 3 lines)
+    [caret]     "^" or "~" under the offending token or span
+    [labels]    inline annotation text after the caret
+    [help]      actionable fix suggestion (optional)
+    [note]      secondary context (optional, may appear multiple times)
+
+================================================================================
+  SECTION 3 — COLOR SCHEME (ANSI ESCAPE CODES)
+================================================================================
+
+  Colors are enabled by default on TTY output.
+  Disabled automatically when stdout/stderr is piped.
+  Forced off via: --no-color flag or NO_COLOR environment variable.
+  Forced on  via: --color flag.
+
+  COLOR ASSIGNMENTS:
+    Error header text    : Bold Bright Red     \033[1;91m
+    Warning header text  : Bold Bright Yellow  \033[1;93m
+    Note header text     : Bold Bright Blue    \033[1;94m
+    Fatal header text    : Bold Bright Magenta \033[1;95m
+
+    Error code badge     : Bold White on Red   \033[1;37;41m
+    Warning code badge   : Bold Black on Yellow\033[1;30;43m
+
+    File path            : Cyan                \033[36m
+    Line numbers         : Bold Dark Gray      \033[1;90m
+    Pipe character (|)   : Bold Dark Gray      \033[1;90m
+    Arrow (-->)          : Bold Cyan           \033[1;36m
+
+    Caret (^)            : Bold Red (error)    \033[1;91m
+                           Bold Yellow (warn)  \033[1;93m
+                           Bold Blue (note)    \033[1;94m
+    Squiggle (~)         : Same as caret but for multi-char spans
+
+    Help keyword         : Bold Green          \033[1;92m
+    Note keyword         : Bold Blue           \033[1;94m
+    Inline code `x`      : Bold White          \033[1;97m
+
+    Reset                : \033[0m
+
+================================================================================
+  SECTION 4 — ERROR CODE REGISTRY
+================================================================================
+
+  Format: E{NNN} for errors, W{NNN} for warnings, F{NNN} for fatals.
+
+  ── LEXER ERRORS (E001–E099) ─────────────────────────────────────────────────
+
+  E001  Unknown character
+        "unexpected character '%c' (U+%04X)"
+        Help: check your .lang file for the decimal separator setting
+
+  E002  Unterminated string literal
+        "string literal opened here is never closed"
+        Note: points to the opening '"'
+
+  E003  Unterminated character literal
+        "character literal must contain exactly one character"
+
+  E004  Unterminated block comment
+        "block comment opened here is never closed"
+        Note: points to the opening '/*'
+
+  E005  Invalid escape sequence
+        "unknown escape sequence '\\%c'"
+        Help: valid sequences are \n \t \r \\ \" \0 \xNN \uNNNN
+
+  E006  Integer literal overflow
+        "integer literal '%s' overflows 64-bit signed integer"
+        Help: maximum value is 9223372036854775807
+
+  E007  Invalid number literal
+        "malformed numeric literal '%s'"
+
+  E008  Invalid hexadecimal literal
+        "expected hexadecimal digit after '0x', found '%c'"
+
+  E009  Decimal separator conflict
+        "found '.' as decimal separator but this file uses ',' (French mode)"
+        Help: change decimal_sep in your .lang file or use '%s' instead
+
+  ── PARSER ERRORS (E100–E199) ────────────────────────────────────────────────
+
+  E100  Unexpected token
+        "expected %s, found '%s'"
+        Note: shows what was expected at this point in the grammar
+
+  E101  Missing semicolon
+        "expected ';' after %s"
+        Help: add ';' here
+
+  E102  Missing closing delimiter
+        "unclosed '%s' — expected '%s'"
+        Note: points to the opening delimiter
+
+  E103  Empty function body
+        "function '%s' has no statements"
+        Help: add at least a return statement
+
+  E104  Expression expected
+        "expected an expression, found '%s'"
+
+  E105  Invalid lvalue
+        "'%s' cannot be assigned to"
+        Help: only variables, array elements, and struct fields are assignable
+
+  E106  Invalid parameter list
+        "expected parameter name, found '%s'"
+
+  E107  Duplicate parameter name
+        "parameter '%s' is declared more than once"
+
+  E108  Missing function return type
+        "function '%s' declaration is missing a return type after ':'"
+
+  E109  Struct declared inside function
+        "type declarations must appear at module level, not inside functions"
+
+  ── TYPE ERRORS (E200–E399) ──────────────────────────────────────────────────
+
+  E200  Type mismatch in assignment
+        "cannot assign value of type `%s` to variable of type `%s`"
+        Help: (if REAL -> INT) use cast<integer>(expr) for explicit truncation
+        Note: variable declared on line %d
+
+  E201  Type mismatch in binary operation
+        "operator '%s' cannot be applied to types `%s` and `%s`"
+        Note: left operand has type `%s`; right operand has type `%s`
+
+  E202  Type mismatch in function argument
+        "argument %d of call to '%s' has type `%s`, expected `%s`"
+        Note: '%s' declared here
+
+  E203  Argument count mismatch
+        "function '%s' expects %d argument(s), but %d were provided"
+        Note: '%s' declared with %d parameter(s) here
+
+  E204  Condition not boolean
+        "%s condition must be of type `bool`, found `%s`"
+        Help: (if numeric) use an explicit comparison: expr != 0
+
+  E205  Return type mismatch
+        "cannot return value of type `%s` from function declared to return `%s`"
+        Note: return type declared here
+
+  E206  Return in method
+        "methods cannot return a value — use a function instead"
+        Help: change 'Methode' to 'Fonction' and add a return type
+
+  E207  Missing return statement
+        "function '%s' does not return a value on all code paths"
+        Note: this path through the function has no return statement
+        Help: add a return statement at the end, or ensure all branches return
+
+  E208  Undefined identifier
+        "cannot find '%s' in this scope"
+        Help: (if close match found) did you mean '%s'?
+
+  E209  Assignment to constant
+        "'%s' is a constant and cannot be assigned to"
+        Note: '%s' declared as constant here
+
+  E210  Assignment to for-loop variable
+        "loop variable '%s' cannot be modified inside the loop body"
+
+  E211  Array index not integer
+        "array index must be of type `integer`, found `%s`"
+
+  E212  Indexing non-array
+        "cannot index into a value of type `%s`"
+        Help: only array types support '[' indexing
+
+  E213  Field access on non-struct
+        "type `%s` has no field '%s'"
+        Help: (if primitive) only struct types have fields
+
+  E214  Unknown struct field
+        "struct `%s` has no field named '%s'"
+        Note: struct `%s` declared here with fields: %s
+
+  E215  Calling a non-function
+        "'%s' is not callable — it has type `%s`"
+
+  E216  Method called in expression
+        "method '%s' returns no value and cannot be used in an expression"
+        Help: move the call to its own statement line
+
+  E217  Duplicate variable declaration
+        "'%s' is already declared in this scope"
+        Note: first declaration here
+
+  E218  Duplicate function name
+        "a function named '%s' already exists in this module"
+        Note: first declaration here
+
+  E219  Duplicate struct name
+        "a type named '%s' is already declared"
+        Note: first declaration here
+
+  E220  Recursive struct
+        "struct '%s' cannot contain itself directly — use a pointer type"
+        Help: change the field type to ptr of %s
+
+  E221  Invalid cast
+        "cannot cast from `%s` to `%s`"
+        Help: allowed casts: int<->real, int<->char, int<->bool, any->string
+
+  E222  Void in expression
+        "method '%s' has no return value and cannot be used here"
+
+  E223  Undefined type
+        "unknown type name '%s'"
+        Help: did you mean one of: %s?
+
+  E224  Array bounds error
+        "lower bound (%d) must be less than or equal to upper bound (%d)"
+
+  E225  Zero step in for loop
+        "step value of 0 would create an infinite loop"
+
+  E226  For loop variable not integer
+        "loop variable '%s' must be of type `integer`, found `%s`"
+
+  E227  Write argument type
+        "cannot write a value of type `%s` directly"
+        Help: use to_string() or str_format() to convert to a string first
+
+  E228  Read lvalue type
+        "cannot read into a variable of type `%s`"
+        Help: read only supports integer, real, string, char, boolean
+
+  E229  REF argument not lvalue
+        "argument %d passed to '%s' by reference must be a variable, not an expression"
+
+  E230  Null assigned to non-nullable
+        "cannot assign null to a value of type `%s` — it is not nullable"
+        Help: nullable types are string, array, struct, file, socket
+
+  ── MODULE / IMPORT ERRORS (E400–E499) ───────────────────────────────────────
+
+  E400  Module file not found
+        "cannot find module '%s'"
+        Help: searched in: %s
+        Help: check the module name or add its path to the search path
+
+  E401  Circular import
+        "circular import detected: %s"
+        Note: import chain: A -> B -> C -> A shown with arrows
+
+  E402  Module name mismatch
+        "module file declares itself as '%s' but was imported as '%s'"
+
+  E403  Entry file as module
+        "file '%s' uses 'Algorithme' but was imported as a module"
+        Help: use 'Module' declaration for files that are imported
+
+  ── FATAL ERRORS (F001–F099) ─────────────────────────────────────────────────
+
+  F001  Source file not found
+        "cannot open source file '%s': %s"
+
+  F002  Language file not found
+        "cannot open language file '%s': %s"
+        Help: specify a .lang file with --lang=<path>
+
+  F003  Language file malformed
+        "malformed language file '%s' at line %d: %s"
+
+  F004  Out of memory
+        "memory allocation failed — the compiler ran out of memory"
+
+  F005  Internal compiler error
+        "internal compiler error in %s:%d — please report this bug"
+        Note: shows file and line of the assert in debug builds
+
+  ── WARNINGS (W001–W099) ─────────────────────────────────────────────────────
+
+  W001  Unused variable
+        "variable '%s' is declared but never used"
+        Help: prefix with '_' to suppress: _%s
+
+  W002  Unused import
+        "module '%s' is imported but none of its symbols are used"
+
+  W003  Variable shadowing
+        "variable '%s' shadows a variable in an outer scope"
+        Note: outer variable declared here
+
+  W004  Duplicate import
+        "module '%s' is imported more than once"
+
+  W005  Import name conflict
+        "symbol '%s' is exported by both '%s' and '%s'"
+        Note: the version from '%s' (imported last) will be used
+
+  W006  Statically known out-of-bounds
+        "array index %d is outside declared bounds [%d..%d]"
+
+  W007  Uninitialized file use
+        "file variable '%s' may not have been opened before use"
+
+  W008  Uninitialized socket use
+        "socket variable '%s' may not have been connected before use"
+
+  W009  Unreachable code
+        "code after return statement is unreachable"
+
+================================================================================
+  SECTION 5 — MULTI-DIAGNOSTIC SUMMARY
+================================================================================
+
+  After all diagnostics are printed, a summary line is shown:
+
+    error: aborting due to 3 previous errors; 1 warning emitted
+
+  Color:
+    "error:" in Bold Red
+    count in Bold White
+    "warning" in Bold Yellow
+
+  If warnings only (no errors):
+    warning: 2 warnings emitted
+
+  If errors + notes only:
+    error: aborting due to 1 error
+
+================================================================================
+  SECTION 6 — LOCALIZED ERROR MESSAGES
+================================================================================
+
+  Error message TEMPLATES are stored in the .lang file under [errors].
+  The error code is the key; the value is a printf-style format string.
+  The DiagnosticEngine substitutes the .lang template at render time.
+
+  Example fr.lang entries:
+    E200 = impossible d'assigner un `%s` à une variable de type `%s`
+    E204 = la condition du %s doit être de type `booleen`, reçu `%s`
+    E208 = identifiant '%s' introuvable dans cette portée
+    W001 = variable '%s' déclarée mais jamais utilisée
+    help_cast = utiliser cast<%s>(expr) pour une conversion explicite
+
+  Fallback: if a key is missing from the .lang file, English is used.
+  This means English messages are the canonical baseline.
+
+================================================================================
+  SECTION 7 — DIAGNOSTIC ENGINE C API
+================================================================================
+
+  // diag.h
+
+  typedef enum {
+      DIAG_NOTE,
+      DIAG_WARNING,
+      DIAG_ERROR,
+      DIAG_FATAL,
+  } DiagLevel;
+
+  typedef struct {
+      const char* file;
+      int         line;
+      int         col;
+      int         span;          // number of chars to underline (~)
+  } SourceLoc;
+
+  typedef struct Diagnostic {
+      DiagLevel       level;
+      int             code;       // E200, W001, etc. as integer
+      char*           message;    // fully formatted (substituted)
+      SourceLoc       primary;    // main caret location
+      SourceLoc*      secondary;  // additional spans (nullable type, etc.)
+      int             secondary_count;
+      char*           help;       // optional help line
+      char**          notes;      // optional note lines
+      int             note_count;
+  } Diagnostic;
+
+  typedef struct DiagEngine DiagEngine;
+
+  DiagEngine* diag_engine_new(LangTable* lang, bool use_color);
+  void        diag_engine_free(DiagEngine* eng);
+
+  // Emit a diagnostic. Takes ownership of heap strings.
+  void diag_emit(DiagEngine* eng, Diagnostic diag);
+
+  // Convenience macros (fill in __FILE__, __LINE__ automatically):
+  #define DIAG_ERROR(eng, code, loc, ...) \
+      diag_emit(eng, diag_make(DIAG_ERROR, code, loc, __VA_ARGS__))
+  #define DIAG_WARN(eng, code, loc, ...) \
+      diag_emit(eng, diag_make(DIAG_WARNING, code, loc, __VA_ARGS__))
+
+  // Returns true if any ERROR or FATAL was emitted
+  bool diag_has_errors(DiagEngine* eng);
+
+  // Print the final summary line
+  void diag_print_summary(DiagEngine* eng);
+
+  // Source file registry — DiagEngine reads source lines for context display
+  void diag_register_source(DiagEngine* eng, const char* path,
+                             const char* source, size_t length);
+
+================================================================================
+  SECTION 8 — EXAMPLE RENDERED OUTPUT
+================================================================================
+
+  ─── Example 1: Type mismatch ───────────────────────────────────────────────
+
+  error[E200]: type mismatch in assignment
+   --> src/main.alg:14:10
+    |
+  13 |  Variables:
+  14 |      x <- 3,14;
+     |      ^ ~~~~~ cannot assign `reel` to variable of type `entier`
+    |
+    = help: use an explicit cast: cast<entier>(3,14)
+    = note: variable `x` declared as `entier` on line 13
+
+
+  ─── Example 2: Missing return path ─────────────────────────────────────────
+
+  error[E207]: function 'maximum' does not return on all code paths
+   --> src/utils.alg:22:1
+    |
+  18 |  Fonction: maximum(a: entier, b: entier): entier;
+     |  ^^^^^^^^ function declared here
+  ...
+  22 |  FinFonction;
+     |  ^^^^^^^^^^^ not all paths through this function return a value
+    |
+    = help: add `retourne ...;` at the end, or ensure all branches return
+    = note: the `sinon` branch is missing a return statement
+
+
+  ─── Example 3: Circular import ─────────────────────────────────────────────
+
+  error[E401]: circular import detected
+   --> src/module_a.alg:2:11
+    |
+  2 |  Importer: module_b;
+     |            ^^^^^^^^ `module_a` imports `module_b`
+    |
+    = note: import chain:
+            module_a --> module_b --> module_c --> module_a
+    = help: restructure your modules to remove the cycle
+
+
+  ─── Example 4: Undefined identifier with suggestion ────────────────────────
+
+  error[E208]: cannot find `factoriel` in this scope
+   --> src/main.alg:31:14
+    |
+  31 |      ecrire(factoriel(n));
+     |              ^^^^^^^^^ not found in this scope
+    |
+    = help: did you mean `factorielle`?
+    = note: `factorielle` is defined in module `math_utils` (imported line 2)
+
+
+  ─── Example 5: Warning with suppression hint ───────────────────────────────
+
+  warning[W001]: variable `temp` is declared but never used
+   --> src/algo.alg:8:5
+    |
+  8 |      temp : entier;
+     |      ^^^^ variable declared here but never read
+    |
+    = help: prefix with `_` to suppress this warning: `_temp`
+
+
+  ─── Example 6: Fatal error ──────────────────────────────────────────────────
+
+  fatal[F002]: cannot open language file 'de.lang'
+   --> command line
+    |
+    = help: specify a .lang file with --lang=<path>
+    = note: searched in: ./languages/, /usr/share/alglang/languages/
+
+
+  ─── Summary line ────────────────────────────────────────────────────────────
+
+  error: aborting due to 3 previous errors; 2 warnings emitted
+
+================================================================================
+  END OF ERROR REPORTING SPECIFICATION
+================================================================================

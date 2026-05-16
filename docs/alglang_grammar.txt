@@ -1,0 +1,881 @@
+================================================================================
+  ALGLANG LANGUAGE GRAMMAR SPECIFICATION
+  Version 1.0.0 — Human-Language-Agnostic Algorithm Language
+================================================================================
+
+  This grammar is defined using Extended Backus-Naur Form (EBNF).
+  Surface keywords (si, if, alors, then, etc.) are resolved at runtime
+  from a .lang configuration file. This document uses logical keyword
+  names in UPPER_SNAKE_CASE to remain language-agnostic.
+
+  Notation:
+    ->          production rule
+    |           alternation
+    ?           zero or one
+    *           zero or more
+    +           one or more
+    ( )         grouping
+    [ ]         optional (same as ?)
+    "x"         literal terminal
+    UPPER       lexer token or logical keyword
+    lower       non-terminal (grammar rule)
+
+================================================================================
+  1. PROGRAM STRUCTURE
+================================================================================
+
+program
+    -> module_file
+     | entry_file
+
+module_file
+    -> KW_MODULE ":" IDENTIFIER ";"
+       import_decl*
+       type_section?
+       constant_section?
+       function_section*
+       method_section*
+
+entry_file
+    -> KW_ALGO ":" IDENTIFIER ";"
+       import_decl*
+       type_section?
+       constant_section?
+       function_section*
+       method_section*
+       var_section?
+       block
+
+import_decl
+    -> KW_IMPORT ":" IDENTIFIER ("," IDENTIFIER)* ";"
+
+--------------------------------------------------------------------------------
+  1.1 ALGORITHM / MODULE HEADER
+--------------------------------------------------------------------------------
+
+algo_header
+    -> KW_ALGO ":" IDENTIFIER ";"
+
+module_header
+    -> KW_MODULE ":" IDENTIFIER ";"
+
+================================================================================
+  2. DECLARATIONS
+================================================================================
+
+--------------------------------------------------------------------------------
+  2.1 TYPE DECLARATIONS
+--------------------------------------------------------------------------------
+
+type_section
+    -> KW_TYPE ":" type_decl+
+
+type_decl
+    -> struct_decl
+
+struct_decl
+    -> KW_STRUCT IDENTIFIER
+       field_list
+       KW_ENDSTRUCT
+
+field_list
+    -> field_decl+
+
+field_decl
+    -> IDENTIFIER ":" type ";"
+
+--------------------------------------------------------------------------------
+  2.2 CONSTANT DECLARATIONS
+--------------------------------------------------------------------------------
+
+constant_section
+    -> KW_CONST ":" const_decl+
+
+const_decl
+    -> IDENTIFIER ":" type "=" literal ";"
+
+  NOTE: Constants are statically typed. The declared type must match the
+        literal value exactly. No implicit coercion except INT -> REAL.
+
+--------------------------------------------------------------------------------
+  2.3 VARIABLE DECLARATIONS
+--------------------------------------------------------------------------------
+
+var_section
+    -> KW_VAR ":" var_list
+
+var_list
+    -> var_decl+
+
+var_decl
+    -> IDENTIFIER ("," IDENTIFIER)* ":" type ";"
+
+  NOTE: Variables are zero-initialized by default:
+        INT -> 0, REAL -> 0.0, BOOL -> false, STRING -> "",
+        CHAR -> '\0', arrays -> zero-filled, structs -> all fields zero-init.
+
+================================================================================
+  3. FUNCTIONS AND METHODS
+================================================================================
+
+--------------------------------------------------------------------------------
+  3.1 FUNCTIONS (return a value)
+--------------------------------------------------------------------------------
+
+function_section
+    -> KW_FUNCTION ":" IDENTIFIER
+       "(" param_list? ")" ":" type ";"
+       var_section?
+       statement*
+       KW_ENDFUNCTION ";"
+
+  NOTE: Functions MUST return a value on ALL control flow paths.
+        The return type must match the declared type exactly.
+        Functions may not return TY_VOID.
+
+--------------------------------------------------------------------------------
+  3.2 METHODS (no return value)
+--------------------------------------------------------------------------------
+
+method_section
+    -> KW_METHOD ":" IDENTIFIER
+       "(" param_list? ")" ":"
+       var_section?
+       statement*
+       KW_ENDMETHOD ";"
+
+  NOTE: Methods must NOT contain a return statement.
+        Methods return TY_VOID implicitly.
+        Methods cannot be used inside expressions.
+
+--------------------------------------------------------------------------------
+  3.3 PARAMETERS
+--------------------------------------------------------------------------------
+
+param_list
+    -> param ("," param)*
+
+param
+    -> IDENTIFIER ":" type
+     | IDENTIFIER ":" type KW_REF          // pass by reference
+
+  NOTE: Default parameter passing is BY VALUE.
+        KW_REF enables pass-by-reference for mutation.
+        Arrays and structs passed by value are deep-copied.
+        Arrays and structs passed by reference share the same memory.
+
+================================================================================
+  4. TYPES
+================================================================================
+
+type
+    -> primitive_type
+     | array_type
+     | struct_type
+     | pointer_type
+
+primitive_type
+    -> KW_INT                  // 64-bit signed integer
+     | KW_REAL                 // 64-bit IEEE 754 double
+     | KW_STRING               // UTF-8 heap-allocated, GC-managed
+     | KW_CHAR                 // single UTF-8 code point
+     | KW_BOOL                 // true | false
+     | KW_NUMBER               // generic numeric (resolves to INT or REAL)
+
+array_type
+    -> KW_ARRAY "[" range "]" KW_OF type
+
+range
+    -> INTEGER_LITERAL ".." INTEGER_LITERAL
+
+  NOTE: Array bounds are INCLUSIVE on both ends.
+        Lower bound may be any integer (including 0 or 1).
+        Multi-dimensional arrays via nesting:
+          array[1..3] of array[1..3] of integer
+
+struct_type
+    -> IDENTIFIER              // must reference a declared KW_STRUCT
+
+pointer_type
+    -> KW_PTR KW_OF type       // explicit pointer (advanced use)
+
+  NOTE: Pointer types are restricted to file handles and network sockets.
+        General pointer arithmetic is not permitted.
+
+================================================================================
+  5. STATEMENTS
+================================================================================
+
+block
+    -> KW_BEGIN ":" statement* KW_END
+
+statement
+    -> assignment_stmt
+     | if_stmt
+     | while_stmt
+     | do_while_stmt
+     | for_stmt
+     | return_stmt
+     | write_stmt
+     | read_stmt
+     | method_call_stmt
+     | expression_stmt
+     | file_stmt
+     | network_stmt
+
+--------------------------------------------------------------------------------
+  5.1 ASSIGNMENT
+--------------------------------------------------------------------------------
+
+assignment_stmt
+    -> lvalue "<-" expression ";"
+
+  TYPE RULE: type(lvalue) must be assignable from type(expression).
+             Constants may not appear as lvalue.
+
+lvalue
+    -> IDENTIFIER
+     | lvalue "." IDENTIFIER           // struct field access
+     | lvalue "[" expression "]"       // array element access
+
+--------------------------------------------------------------------------------
+  5.2 CONTROL FLOW
+--------------------------------------------------------------------------------
+
+if_stmt
+    -> KW_IF expression
+       KW_THEN ":"
+       statement*
+       elseif_clause*
+       else_clause?
+       KW_ENDIF
+
+  TYPE RULE: expression must be TY_BOOL.
+
+elseif_clause
+    -> KW_ELSEIF expression
+       KW_THEN ":"
+       statement*
+
+  TYPE RULE: expression must be TY_BOOL.
+
+else_clause
+    -> KW_ELSE ":" statement*
+
+while_stmt
+    -> KW_WHILE "(" expression ")"
+       KW_DO ":"
+       statement*
+       KW_ENDWHILE
+
+  TYPE RULE: expression must be TY_BOOL.
+
+do_while_stmt
+    -> KW_REPEAT ":"
+       statement*
+       KW_UNTIL "(" expression ")" ";"
+
+  TYPE RULE: expression must be TY_BOOL.
+
+for_stmt
+    -> KW_FOR IDENTIFIER
+       "<-" expression
+       KW_TO expression
+       (KW_STEP expression)?
+       KW_DO ":"
+       statement*
+       KW_ENDFOR
+
+  TYPE RULE: IDENTIFIER must be TY_INT.
+             Both bound expressions must be TY_INT.
+             Step expression (if present) must be TY_INT.
+             The loop variable is read-only inside the loop body.
+
+return_stmt
+    -> KW_RETURN expression ";"
+
+  TYPE RULE: Only valid inside a function (not a method).
+             type(expression) must match the function's declared return type.
+
+--------------------------------------------------------------------------------
+  5.3 I/O STATEMENTS
+--------------------------------------------------------------------------------
+
+write_stmt
+    -> KW_WRITE "(" expression ("," expression)* ")" ";"
+
+  TYPE RULE: All expressions must be primitive types (INT, REAL, STRING,
+             CHAR, BOOL) or any type with a string conversion.
+
+read_stmt
+    -> KW_READ "(" lvalue ")" ";"
+
+  TYPE RULE: lvalue must be a primitive type.
+             Reads from stdin and parses to the lvalue's type.
+             Runtime error if input cannot be parsed.
+
+method_call_stmt
+    -> IDENTIFIER "(" argument_list? ")" ";"
+
+  TYPE RULE: IDENTIFIER must resolve to a method (TY_VOID return).
+             arg count and types must match the method's signature.
+
+expression_stmt
+    -> call_expr ";"
+
+  NOTE: Only function calls are valid as expression statements.
+        Bare expressions with no side effect are a type-checker warning.
+
+================================================================================
+  6. FILE HANDLING
+================================================================================
+
+file_stmt
+    -> file_open_stmt
+     | file_close_stmt
+     | file_write_stmt
+     | file_read_stmt
+     | file_seek_stmt
+     | file_delete_stmt
+     | file_exists_stmt
+
+file_open_stmt
+    -> lvalue "<-" KW_FILE_OPEN "(" expression "," file_mode ")" ";"
+
+  TYPE RULE: lvalue must be TY_FILE.
+             expression (path) must be TY_STRING.
+
+file_mode
+    -> KW_FILE_READ
+     | KW_FILE_WRITE
+     | KW_FILE_APPEND
+     | KW_FILE_READ_WRITE
+
+file_close_stmt
+    -> KW_FILE_CLOSE "(" lvalue ")" ";"
+
+  TYPE RULE: lvalue must be TY_FILE.
+
+file_write_stmt
+    -> KW_FILE_WRITE_LINE "(" lvalue "," expression ")" ";"
+
+  TYPE RULE: lvalue must be TY_FILE. expression must be TY_STRING.
+
+file_read_stmt
+    -> lvalue "<-" KW_FILE_READ_LINE "(" lvalue ")" ";"
+
+  TYPE RULE: result lvalue must be TY_STRING.
+             file lvalue must be TY_FILE.
+
+file_seek_stmt
+    -> KW_FILE_SEEK "(" lvalue "," expression ")" ";"
+
+  TYPE RULE: lvalue must be TY_FILE. expression must be TY_INT.
+
+file_delete_stmt
+    -> KW_FILE_DELETE "(" expression ")" ";"
+
+  TYPE RULE: expression must be TY_STRING (path).
+
+file_exists_stmt
+    -> lvalue "<-" KW_FILE_EXISTS "(" expression ")" ";"
+
+  TYPE RULE: result lvalue must be TY_BOOL.
+
+  ADDITIONAL FILE NATIVE FUNCTIONS (registered as builtins):
+    file_eof(f: file): bool
+    file_size(f: file): integer
+    file_flush(f: file)
+    file_rename(old: string, new: string): bool
+    file_copy(src: string, dst: string): bool
+    dir_create(path: string): bool
+    dir_list(path: string): array of string
+    dir_exists(path: string): bool
+
+================================================================================
+  7. NETWORK HANDLING
+================================================================================
+
+network_stmt
+    -> net_connect_stmt
+     | net_listen_stmt
+     | net_accept_stmt
+     | net_send_stmt
+     | net_receive_stmt
+     | net_close_stmt
+     | net_http_stmt
+
+net_connect_stmt
+    -> lvalue "<-" KW_NET_CONNECT "(" expression "," expression ")" ";"
+
+  TYPE RULE: lvalue must be TY_SOCKET.
+             First expression (host) must be TY_STRING.
+             Second expression (port) must be TY_INT.
+
+net_listen_stmt
+    -> lvalue "<-" KW_NET_LISTEN "(" expression ")" ";"
+
+  TYPE RULE: lvalue must be TY_SOCKET.
+             expression (port) must be TY_INT.
+
+net_accept_stmt
+    -> lvalue "<-" KW_NET_ACCEPT "(" lvalue ")" ";"
+
+  TYPE RULE: Both must be TY_SOCKET.
+
+net_send_stmt
+    -> KW_NET_SEND "(" lvalue "," expression ")" ";"
+
+  TYPE RULE: lvalue must be TY_SOCKET. expression must be TY_STRING.
+
+net_receive_stmt
+    -> lvalue "<-" KW_NET_RECEIVE "(" lvalue "," expression ")" ";"
+
+  TYPE RULE: result lvalue must be TY_STRING.
+             socket lvalue must be TY_SOCKET.
+             expression (max bytes) must be TY_INT.
+
+net_close_stmt
+    -> KW_NET_CLOSE "(" lvalue ")" ";"
+
+  TYPE RULE: lvalue must be TY_SOCKET.
+
+net_http_stmt
+    -> lvalue "<-" KW_NET_HTTP_GET  "(" expression ")" ";"
+     | lvalue "<-" KW_NET_HTTP_POST "(" expression "," expression ")" ";"
+
+  TYPE RULE: URL expression must be TY_STRING.
+             POST body expression must be TY_STRING.
+             result lvalue must be TY_STRING (response body).
+
+  ADDITIONAL NETWORK NATIVE FUNCTIONS:
+    net_set_timeout(s: socket, ms: integer)
+    net_is_connected(s: socket): bool
+    net_host_resolve(host: string): string   // DNS lookup
+    net_http_get_headers(url: string): string
+    net_http_status(url: string): integer
+
+================================================================================
+  8. GRAPHICS MODULE
+================================================================================
+
+  NOTE: Graphics functions are registered as native builtins using
+        localized names from the .lang file. They are called as
+        regular function/method calls in user code.
+        All names below are LOGICAL names mapped to surface names at runtime.
+
+  WINDOW MANAGEMENT:
+    GFX_INIT_WINDOW(width: integer, height: integer, title: string)
+    GFX_CLOSE_WINDOW()
+    GFX_SHOULD_CLOSE(): bool
+    GFX_SET_FPS(fps: integer)
+    GFX_GET_FPS(): integer
+    GFX_TOGGLE_FULLSCREEN()
+    GFX_SET_TITLE(title: string)
+    GFX_GET_WIDTH(): integer
+    GFX_GET_HEIGHT(): integer
+
+  DRAWING LIFECYCLE (must wrap all draw calls):
+    GFX_BEGIN_DRAW()
+    GFX_END_DRAW()
+    GFX_CLEAR(color: integer)
+
+  SHAPES:
+    GFX_DRAW_PIXEL(x: integer, y: integer, color: integer)
+    GFX_DRAW_LINE(x1: integer, y1: integer, x2: integer, y2: integer, color: integer)
+    GFX_DRAW_RECT(x: integer, y: integer, w: integer, h: integer, color: integer)
+    GFX_DRAW_RECT_FILL(x: integer, y: integer, w: integer, h: integer, color: integer)
+    GFX_DRAW_CIRCLE(cx: integer, cy: integer, r: integer, color: integer)
+    GFX_DRAW_CIRCLE_FILL(cx: integer, cy: integer, r: integer, color: integer)
+    GFX_DRAW_TRIANGLE(x1: integer, y1: integer, x2: integer, y2: integer,
+                      x3: integer, y3: integer, color: integer)
+    GFX_DRAW_ELLIPSE(cx: integer, cy: integer, rx: integer, ry: integer, color: integer)
+
+  TEXT:
+    GFX_DRAW_TEXT(text: string, x: integer, y: integer, size: integer, color: integer)
+    GFX_MEASURE_TEXT(text: string, size: integer): integer
+    GFX_LOAD_FONT(path: string): integer          // returns font handle
+    GFX_DRAW_TEXT_EX(text: string, x: integer, y: integer,
+                     size: integer, color: integer, font: integer)
+
+  TEXTURES / IMAGES:
+    GFX_LOAD_TEXTURE(path: string): integer        // returns texture handle
+    GFX_DRAW_TEXTURE(tex: integer, x: integer, y: integer)
+    GFX_DRAW_TEXTURE_EX(tex: integer, x: integer, y: integer,
+                        w: integer, h: integer)
+    GFX_UNLOAD_TEXTURE(tex: integer)
+
+  COLORS (logical names map to color integer constants):
+    GFX_COLOR_RED, GFX_COLOR_GREEN, GFX_COLOR_BLUE,
+    GFX_COLOR_WHITE, GFX_COLOR_BLACK, GFX_COLOR_YELLOW,
+    GFX_COLOR_CYAN, GFX_COLOR_MAGENTA, GFX_COLOR_ORANGE,
+    GFX_COLOR_GRAY, GFX_COLOR_DARKGRAY, GFX_COLOR_TRANSPARENT
+    GFX_MAKE_COLOR(r: integer, g: integer, b: integer, a: integer): integer
+
+  INPUT — KEYBOARD:
+    GFX_KEY_PRESSED(key: integer): bool
+    GFX_KEY_DOWN(key: integer): bool
+    GFX_KEY_RELEASED(key: integer): bool
+    GFX_GET_KEY_PRESSED(): integer
+
+  INPUT — MOUSE:
+    GFX_MOUSE_X(): integer
+    GFX_MOUSE_Y(): integer
+    GFX_MOUSE_BUTTON_PRESSED(btn: integer): bool
+    GFX_MOUSE_BUTTON_DOWN(btn: integer): bool
+    GFX_MOUSE_WHEEL_DELTA(): real
+
+  AUDIO:
+    GFX_INIT_AUDIO()
+    GFX_LOAD_SOUND(path: string): integer
+    GFX_PLAY_SOUND(snd: integer)
+    GFX_STOP_SOUND(snd: integer)
+    GFX_LOAD_MUSIC(path: string): integer
+    GFX_PLAY_MUSIC(mus: integer)
+    GFX_UPDATE_MUSIC(mus: integer)          // call once per frame
+    GFX_STOP_MUSIC(mus: integer)
+
+  TIMING:
+    GFX_GET_TIME(): real                   // seconds since window open
+    GFX_GET_FRAME_TIME(): real             // delta time in seconds
+    GFX_WAIT(seconds: real)
+
+================================================================================
+  9. EXPRESSIONS
+================================================================================
+
+expression
+    -> logical_or
+
+logical_or
+    -> logical_and (KW_OR logical_and)*
+
+logical_and
+    -> equality (KW_AND equality)*
+
+equality
+    -> comparison (("==" | "!=") comparison)*
+
+comparison
+    -> term (("<" | "<=" | ">" | ">=") term)*
+
+term
+    -> factor (("+" | "-") factor)*
+
+factor
+    -> unary (("*" | "/" | KW_MOD) unary)*
+
+unary
+    -> ("!" | "-" | KW_NOT) unary
+     | call_expr
+
+call_expr
+    -> primary
+       ( "(" argument_list? ")"      // function call
+       | "." IDENTIFIER              // struct field access
+       | "[" expression "]"          // array index
+       )*
+
+primary
+    -> INTEGER_LITERAL
+     | REAL_LITERAL
+     | STRING_LITERAL
+     | CHAR_LITERAL
+     | KW_TRUE
+     | KW_FALSE
+     | KW_NULL
+     | KW_NIL
+     | IDENTIFIER
+     | "(" expression ")"
+     | type_cast_expr
+
+type_cast_expr
+    -> KW_CAST "<" type ">" "(" expression ")"
+
+  NOTE: Explicit casts allowed:
+        INT  -> REAL  (widening, always safe)
+        REAL -> INT   (truncation, explicit required)
+        INT  -> CHAR  (code point, explicit required)
+        CHAR -> INT   (code point, always safe)
+        Any -> STRING (calls builtin to_string())
+
+argument_list
+    -> expression ("," expression)*
+
+================================================================================
+  10. BUILT-IN NATIVE FUNCTIONS (STDLIB)
+================================================================================
+
+  MATH:
+    abs(x: number): number
+    sqrt(x: real): real
+    pow(base: real, exp: real): real
+    floor(x: real): integer
+    ceil(x: real): integer
+    round(x: real): integer
+    min(a: number, b: number): number
+    max(a: number, b: number): number
+    clamp(v: number, lo: number, hi: number): number
+    sin(x: real): real
+    cos(x: real): real
+    tan(x: real): real
+    log(x: real): real
+    log10(x: real): real
+    random(): real                         // [0.0, 1.0)
+    random_int(lo: integer, hi: integer): integer
+    seed_random(s: integer)
+    PI: real                               // constant
+
+  STRING:
+    str_length(s: string): integer
+    str_concat(a: string, b: string): string
+    str_slice(s: string, start: integer, end: integer): string
+    str_index_of(s: string, sub: string): integer
+    str_contains(s: string, sub: string): bool
+    str_starts_with(s: string, prefix: string): bool
+    str_ends_with(s: string, suffix: string): bool
+    str_to_upper(s: string): string
+    str_to_lower(s: string): string
+    str_trim(s: string): string
+    str_replace(s: string, old: string, new: string): string
+    str_split(s: string, sep: string): array of string
+    str_join(arr: array of string, sep: string): string
+    str_to_int(s: string): integer
+    str_to_real(s: string): real
+    int_to_str(n: integer): string
+    real_to_str(x: real): string
+    char_to_str(c: char): string
+    str_char_at(s: string, i: integer): char
+    str_format(fmt: string, ...): string   // printf-style formatting
+
+  TYPE CONVERSION:
+    to_string(x: any): string
+    to_int(x: number): integer
+    to_real(x: number): real
+
+  SYSTEM:
+    sys_exit(code: integer)
+    sys_time(): integer                    // unix timestamp
+    sys_clock(): real                      // high-res timer (seconds)
+    sys_env(name: string): string          // environment variable
+    sys_args(): array of string            // command-line arguments
+    sys_sleep(ms: integer)
+    sys_platform(): string                 // "windows" | "linux" | "macos"
+
+================================================================================
+  11. LEXICAL RULES
+================================================================================
+
+IDENTIFIER
+    -> [a-zA-Z_][a-zA-Z0-9_]*
+
+INTEGER_LITERAL
+    -> [0-9]+
+     | "0x" [0-9a-fA-F]+              // hexadecimal
+     | "0b" [01]+                      // binary
+     | "0o" [0-7]+                     // octal
+
+REAL_LITERAL
+    -> [0-9]+ ("." | ",") [0-9]+
+     | [0-9]+ ("." | ",") [0-9]+ ("e" | "E") ["-"]? [0-9]+
+
+  NOTE: Decimal separator is configured per .lang file:
+        French uses comma (,), English uses dot (.)
+        The lexer reads the decimal_sep field at startup.
+
+STRING_LITERAL
+    -> '"' ( escape_seq | [^"\] )* '"'
+
+escape_seq
+    -> '\n'                            // newline
+     | '\t'                            // tab
+     | '\r'                            // carriage return
+     | '\\'                            // backslash
+     | '\"'                            // double quote
+     | '\0'                            // null character
+     | '\x' [0-9a-fA-F]{2}            // hex byte
+     | '\u' [0-9a-fA-F]{4}            // unicode code point
+
+CHAR_LITERAL
+    -> "'" ( escape_seq | . ) "'"
+
+BOOLEAN_LITERAL
+    -> KW_TRUE | KW_FALSE
+
+COMMENT
+    -> "//" [^\n]* "\n"               // single-line, ignored by lexer
+     | "/*" .* "*/"                   // multi-line, ignored by lexer
+
+WHITESPACE
+    -> [ \t\r\n]+                     // ignored by lexer
+
+================================================================================
+  12. OPERATORS (PRECEDENCE, LOW TO HIGH)
+================================================================================
+
+  Level 1 (lowest)  : KW_OR
+  Level 2           : KW_AND
+  Level 3           : "==" "!="
+  Level 4           : "<" "<=" ">" ">="
+  Level 5           : "+" "-"
+  Level 6           : "*" "/" KW_MOD
+  Level 7 (unary)   : "!" "-" KW_NOT
+  Level 8 (highest) : call "." "[]" "()"
+
+  String concatenation: "+" operator when both operands are TY_STRING.
+
+================================================================================
+  13. LOGICAL KEYWORD TOKENS (mapped to surface names via .lang)
+================================================================================
+
+  STRUCTURAL:
+    KW_ALGO, KW_MODULE, KW_IMPORT
+    KW_BEGIN, KW_END
+    KW_VAR, KW_CONST, KW_TYPE
+    KW_STRUCT, KW_ENDSTRUCT
+
+  FUNCTIONS:
+    KW_FUNCTION, KW_ENDFUNCTION
+    KW_METHOD, KW_ENDMETHOD
+    KW_RETURN, KW_REF
+
+  CONTROL:
+    KW_IF, KW_THEN, KW_ELSEIF, KW_ELSE, KW_ENDIF
+    KW_WHILE, KW_DO, KW_ENDWHILE
+    KW_REPEAT, KW_UNTIL
+    KW_FOR, KW_TO, KW_STEP, KW_ENDFOR
+
+  TYPES:
+    KW_INT, KW_REAL, KW_STRING, KW_CHAR, KW_BOOL, KW_NUMBER
+    KW_ARRAY, KW_OF, KW_FILE, KW_SOCKET, KW_PTR
+    KW_CAST
+
+  I/O:
+    KW_WRITE, KW_READ
+
+  FILE:
+    KW_FILE_OPEN, KW_FILE_CLOSE, KW_FILE_WRITE_LINE, KW_FILE_READ_LINE
+    KW_FILE_SEEK, KW_FILE_DELETE, KW_FILE_EXISTS
+    KW_FILE_READ, KW_FILE_WRITE, KW_FILE_APPEND, KW_FILE_READ_WRITE
+
+  NETWORK:
+    KW_NET_CONNECT, KW_NET_LISTEN, KW_NET_ACCEPT
+    KW_NET_SEND, KW_NET_RECEIVE, KW_NET_CLOSE
+    KW_NET_HTTP_GET, KW_NET_HTTP_POST
+
+  LOGICAL / BOOLEAN:
+    KW_AND, KW_OR, KW_NOT
+    KW_TRUE, KW_FALSE, KW_NULL, KW_NIL
+    KW_MOD
+
+  GRAPHICS (see Section 8 for full list):
+    GFX_INIT_WINDOW, GFX_CLOSE_WINDOW, GFX_SHOULD_CLOSE ...
+
+================================================================================
+  14. EXAMPLE PROGRAMS
+================================================================================
+
+----------------------------------------
+  EXAMPLE 1: Full entry file with import
+----------------------------------------
+
+  # File: math_utils.alg
+  Module: math_utils;
+
+  Fonction: factorielle(n: entier): entier;
+  Variables:
+      resultat : entier;
+  Debut:
+      si (n <= 1) alors:
+          retourne 1;
+      finsi
+      retourne n * factorielle(n - 1);
+  FinFonction;
+
+  Methode: afficher_factorielle(n: entier):
+  Debut:
+      ecrire("fact(" + n + ") = " + factorielle(n));
+  FinMethode;
+
+
+  # File: main.alg
+  Algorithme: principal;
+  Importer: math_utils;
+
+  Variables:
+      i : entier;
+  Debut:
+      pour i <- 1 jusqu_a 10 faire:
+          afficher_factorielle(i);
+      finpour
+  Fin
+
+----------------------------------------
+  EXAMPLE 2: Struct + Array + File
+----------------------------------------
+
+  Algorithme: gestion_etudiants;
+
+  Type:
+      Structure Etudiant
+          nom  : chaine_charactere;
+          note : reel;
+      FinStruct
+
+  Variables:
+      etudiants : tableau[1..30] de Etudiant;
+      fichier   : fichier;
+      i         : entier;
+      ligne     : chaine_charactere;
+  Debut:
+      fichier <- ouvrir_fichier("notes.txt", LIRE);
+      i <- 1;
+      tant_que (non eof(fichier)) faire:
+          ligne <- lire_ligne(fichier);
+          etudiants[i].nom  <- ligne;
+          i <- i + 1;
+      fintantque
+      fermer_fichier(fichier);
+  Fin
+
+----------------------------------------
+  EXAMPLE 3: Graphics loop
+----------------------------------------
+
+  Algorithme: animation;
+  Variables:
+      x     : entier;
+      vitesse : entier;
+  Debut:
+      init_fenetre(800, 600, "Animation");
+      definir_fps(60);
+      x <- 0;
+      vitesse <- 3;
+      tant_que (non fenetre_fermee()) faire:
+          debut_dessin();
+              effacer(noir);
+              dessiner_cercle_plein(x, 300, 20, rouge);
+          fin_dessin();
+          x <- x + vitesse;
+          si (x > 800) alors:
+              x <- 0;
+          finsi
+      fintantque
+      fermer_fenetre();
+  Fin
+
+----------------------------------------
+  EXAMPLE 4: Network HTTP request
+----------------------------------------
+
+  Algorithme: requete_web;
+  Variables:
+      reponse : chaine_charactere;
+  Debut:
+      reponse <- http_get("https://api.exemple.com/donnees");
+      ecrire("Réponse: " + reponse);
+  Fin
+
+================================================================================
+  END OF GRAMMAR SPECIFICATION
+================================================================================

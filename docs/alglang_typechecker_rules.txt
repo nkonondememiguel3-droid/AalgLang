@@ -1,0 +1,432 @@
+================================================================================
+  ALGLANG TYPE CHECKER — RULES SPECIFICATION
+  Version 1.0.0
+================================================================================
+
+  The type checker is a mandatory pass between the parser and the compiler.
+  It operates on the fully-built AST and annotates every node with a
+  resolved Type*. If any error is found, compilation is aborted after the
+  type checker completes (errors are COLLECTED, not fatal-on-first).
+
+  Conventions used in this document:
+    T(expr)         — the resolved type of expression node `expr`
+    assignable(A,B) — type B is assignable to a slot of type A
+    match(A,B)      — A and B are exactly the same type
+    numeric(T)      — T is INT, REAL, or NUMBER
+    err(node, ...)  — emit a type error and annotate node with TY_ERROR
+    TY_ERROR        — error sentinel; silences all downstream errors from
+                      nodes that depend on an already-errored node
+
+================================================================================
+  SECTION 1 — TYPE COMPATIBILITY AND COERCION
+================================================================================
+
+  RULE TC-01: EXACT MATCH
+    Two types are equal if and only if:
+    - Both are the same primitive kind, OR
+    - Both are TY_ARRAY with equal bounds and match(element_type), OR
+    - Both are TY_STRUCT with the same struct name (by identity), OR
+    - Both are TY_FUNCTION with match(return_type) and pairwise match on
+      all parameter types.
+
+  RULE TC-02: ASSIGNABILITY
+    assignable(target, source) is true when:
+    - match(target, source)                           — always valid
+    - target == TY_REAL  AND source == TY_INT         — safe widening
+    - target == TY_NUMBER AND source == TY_INT        — valid
+    - target == TY_NUMBER AND source == TY_REAL       — valid
+    - target == TY_INT   AND source == TY_NUMBER      — valid (resolved)
+    - target == TY_REAL  AND source == TY_NUMBER      — valid (resolved)
+    All other combinations are TYPE ERRORS.
+
+  RULE TC-03: IMPLICIT COERCION
+    The ONLY implicit coercion allowed is INT -> REAL.
+    All other conversions require an explicit KW_CAST expression.
+    Implicit REAL -> INT is FORBIDDEN (requires explicit cast).
+    Implicit numeric -> STRING is FORBIDDEN.
+    Implicit STRING -> numeric is FORBIDDEN.
+
+  RULE TC-04: TY_ERROR PROPAGATION
+    If any operand of a binary or unary expression has type TY_ERROR,
+    the result type is TY_ERROR without emitting further errors.
+    This prevents error cascades from a single mistake.
+
+  RULE TC-05: TY_NULL COMPATIBILITY
+    KW_NULL / KW_NIL has type TY_NULL.
+    TY_NULL is assignable to TY_STRING, TY_ARRAY, TY_STRUCT, TY_FILE,
+    TY_SOCKET, and pointer types ONLY.
+    TY_NULL is NOT assignable to INT, REAL, CHAR, or BOOL.
+
+================================================================================
+  SECTION 2 — DECLARATIONS
+================================================================================
+
+  RULE TD-01: VARIABLE DECLARATION
+    Each declared variable name must be unique within its scope.
+    Shadowing an outer-scope variable is ALLOWED but emits a WARNING.
+    Shadowing a function parameter is a TYPE ERROR.
+    Shadowing a constant is a TYPE ERROR.
+    The declared type must be a valid, fully-resolved type.
+
+  RULE TD-02: CONSTANT DECLARATION
+    Constants must be initialized with a literal at declaration.
+    T(literal) must be assignable to the declared type (RULE TC-02).
+    Constants are immutable; assigning to a constant is a TYPE ERROR.
+
+  RULE TD-03: STRUCT DECLARATION
+    Struct names must be unique in the global type namespace.
+    Redefining a struct name is a TYPE ERROR.
+    Field names must be unique within the struct.
+    Duplicate field names are a TYPE ERROR.
+    Structs may contain fields of other struct types (nested structs).
+    Recursive struct definitions (a struct containing itself directly)
+    are a TYPE ERROR. Use a pointer type for recursive data structures.
+
+  RULE TD-04: FUNCTION DECLARATION
+    Function names must be unique in the module's symbol table.
+    A function and a method may NOT share the same name.
+    The declared return type must be a valid, resolved type.
+    TY_VOID is not a valid return type for functions.
+    Functions must have TY_VOID as method return type equivalent — this
+    distinction is enforced by function_section vs method_section grammar.
+
+  RULE TD-05: PARAMETER DECLARATION
+    Parameter names must be unique within the parameter list.
+    Duplicate parameter names are a TYPE ERROR.
+    Each parameter's type must be a valid, resolved type.
+    TY_VOID is not a valid parameter type.
+
+  RULE TD-06: ARRAY DECLARATION
+    The lower bound must be an INTEGER_LITERAL.
+    The upper bound must be an INTEGER_LITERAL.
+    lower_bound must be <= upper_bound; otherwise TYPE ERROR.
+    The element type must be a valid, resolved type.
+
+  RULE TD-07: IMPORT RESOLUTION
+    All imported module names must resolve to a known .alg module file.
+    Unresolved imports are a TYPE ERROR (reported at the import declaration).
+    Circular imports are a TYPE ERROR with a full import chain displayed.
+    Duplicate imports (same module imported twice) are a WARNING.
+
+================================================================================
+  SECTION 3 — ASSIGNMENT
+================================================================================
+
+  RULE TA-01: LVALUE VALIDITY
+    The left-hand side of "<-" must be a valid lvalue:
+    - A declared variable name, OR
+    - A struct field access (lvalue.IDENTIFIER), OR
+    - An array element access (lvalue[expression]).
+    Function names, method names, and constants are NOT valid lvalues.
+
+  RULE TA-02: ASSIGNMENT TYPE CHECK
+    assignable(T(lvalue), T(expression)) must be true.
+    Violation is a TYPE ERROR.
+
+  RULE TA-03: FOR-LOOP VARIABLE IMMUTABILITY
+    The control variable of a for_stmt is read-only inside the loop body.
+    Assigning to it inside the loop body is a TYPE ERROR.
+
+  RULE TA-04: CONSTANT IMMUTABILITY
+    Any assignment to an IDENTIFIER declared in a constant_section
+    is a TYPE ERROR regardless of context.
+
+================================================================================
+  SECTION 4 — EXPRESSIONS
+================================================================================
+
+  RULE TE-01: ARITHMETIC OPERATORS (+, -, *, /, mod)
+    Both operands must be numeric (INT, REAL, or NUMBER).
+    Non-numeric operand: TYPE ERROR.
+
+    Result type:
+      INT   op INT   -> INT
+      REAL  op REAL  -> REAL
+      INT   op REAL  -> REAL    (INT is implicitly widened)
+      REAL  op INT   -> REAL
+      NUMBER op X    -> X (resolves to the concrete type)
+
+    Division (/): result is always REAL if either operand is REAL.
+    Integer division: use mod or explicit cast.
+    Division by integer literal zero: TYPE ERROR (caught statically).
+
+  RULE TE-02: STRING CONCATENATION (+)
+    If BOTH operands are TY_STRING, "+" is string concatenation.
+    Result type: TY_STRING.
+    Mixing TY_STRING with a numeric using "+" is a TYPE ERROR.
+    Use to_string() or str_format() for mixed concatenation.
+
+  RULE TE-03: UNARY NEGATION (-)
+    Operand must be numeric. Result type = T(operand).
+    Non-numeric operand: TYPE ERROR.
+
+  RULE TE-04: LOGICAL OPERATORS (and, or)
+    Both operands must be TY_BOOL.
+    Non-boolean operand: TYPE ERROR.
+    Result type: TY_BOOL.
+
+  RULE TE-05: LOGICAL NOT (not, !)
+    Operand must be TY_BOOL.
+    Non-boolean operand: TYPE ERROR.
+    Result type: TY_BOOL.
+
+  RULE TE-06: EQUALITY OPERATORS (==, !=)
+    Both operands must be the same type (match(A, B)).
+    Exception: one operand may be TY_NULL if the other is a nullable type
+    (STRING, ARRAY, STRUCT, FILE, SOCKET).
+    Comparing numeric types: INT and REAL may be compared (INT widened).
+    Result type: TY_BOOL.
+    Comparing arrays or structs directly with == is a TYPE ERROR;
+    use element-wise comparison or a dedicated equals function.
+
+  RULE TE-07: RELATIONAL OPERATORS (<, <=, >, >=)
+    Both operands must be numeric OR both must be TY_CHAR.
+    TY_STRING comparison with relational operators is a TYPE ERROR;
+    use str_compare() instead.
+    Result type: TY_BOOL.
+
+  RULE TE-08: ARRAY INDEX ACCESS (lvalue[expr])
+    T(lvalue) must be TY_ARRAY; otherwise TYPE ERROR.
+    T(expr) must be TY_INT; otherwise TYPE ERROR.
+    Result type: element_type of the array.
+    Out-of-bounds access is a RUNTIME error, not a type error.
+    Statically known out-of-bounds (literal index) is a TYPE WARNING.
+
+  RULE TE-09: STRUCT FIELD ACCESS (expr.IDENTIFIER)
+    T(expr) must be TY_STRUCT; otherwise TYPE ERROR.
+    IDENTIFIER must be a declared field name of that struct.
+    Unknown field name: TYPE ERROR.
+    Result type: T(field).
+
+  RULE TE-10: FUNCTION CALL EXPRESSION
+    IDENTIFIER must be declared as a function (not a method).
+    Calling a method in expression context is a TYPE ERROR.
+    Arg count must equal param count; otherwise TYPE ERROR.
+    For each argument i: assignable(param_type[i], T(arg[i])) must hold.
+    Result type: function's declared return type.
+
+  RULE TE-11: CAST EXPRESSION (cast<type>(expr))
+    Allowed casts:
+      INT   -> REAL   (widening, no information loss)
+      REAL  -> INT    (truncation, explicit acknowledgment)
+      INT   -> CHAR   (code point)
+      CHAR  -> INT    (code point)
+      any   -> STRING (calls to_string() at runtime)
+      BOOL  -> INT    (true=1, false=0)
+      INT   -> BOOL   (non-zero=true)
+    All other casts are TYPE ERRORS.
+
+  RULE TE-12: BOOLEAN LITERALS
+    KW_TRUE and KW_FALSE always have type TY_BOOL.
+
+  RULE TE-13: NUMERIC LITERALS
+    INTEGER_LITERAL has type TY_INT.
+    REAL_LITERAL has type TY_REAL.
+
+  RULE TE-14: STRING LITERALS
+    STRING_LITERAL has type TY_STRING.
+
+  RULE TE-15: CHAR LITERALS
+    CHAR_LITERAL has type TY_CHAR.
+
+================================================================================
+  SECTION 5 — CONTROL FLOW
+================================================================================
+
+  RULE TCF-01: IF CONDITION
+    T(condition) must be TY_BOOL.
+    Numeric condition (e.g. `si x alors`) is a TYPE ERROR.
+    Use explicit comparison: `si x != 0 alors`.
+
+  RULE TCF-02: WHILE CONDITION
+    T(condition) must be TY_BOOL. Same rule as TCF-01.
+
+  RULE TCF-03: DO-WHILE CONDITION
+    T(condition) must be TY_BOOL. Same rule as TCF-01.
+
+  RULE TCF-04: FOR LOOP
+    The control variable must be declared as TY_INT.
+    Start expression: T must be TY_INT.
+    End expression:   T must be TY_INT.
+    Step expression:  T must be TY_INT (if present).
+    Step of zero is a TYPE ERROR (infinite loop, caught statically).
+    Negative step is allowed and valid.
+
+================================================================================
+  SECTION 6 — FUNCTIONS AND METHODS
+================================================================================
+
+  RULE TF-01: RETURN STATEMENT IN FUNCTION
+    KW_RETURN is only valid inside a function body.
+    Using KW_RETURN inside a method body is a TYPE ERROR.
+    T(return_expression) must be assignable to the function's return type.
+    Missing return type compatibility is a TYPE ERROR.
+
+  RULE TF-02: RETURN COVERAGE (ALL PATHS MUST RETURN)
+    Every possible control-flow path through a function body must end
+    with a return statement. The checker performs basic path analysis:
+    - A bare block with no if/loop: must have a return at end.
+    - An if without else: not considered full coverage.
+    - An if-else where BOTH branches return: coverage satisfied.
+    - A while/for loop body returning: NOT considered coverage
+      (loop may execute zero times).
+    Missing return on any path: TYPE ERROR.
+
+  RULE TF-03: METHOD RETURN
+    Methods must NOT contain a return statement.
+    KW_RETURN inside a method is a TYPE ERROR.
+    Implicit void return at method end is always valid.
+
+  RULE TF-04: RECURSIVE CALLS
+    Functions may call themselves recursively.
+    The function's signature is registered before its body is checked,
+    so recursive calls resolve correctly.
+    Mutual recursion across modules: both signatures must be declared
+    before either body is type-checked (handled by two-pass compilation).
+
+  RULE TF-05: PASS-BY-REFERENCE
+    A KW_REF parameter may only receive an lvalue as argument.
+    Passing a literal or expression result to a REF parameter: TYPE ERROR.
+    Inside the function, a REF parameter has the same type as declared.
+    Modifying a REF parameter modifies the caller's variable.
+
+  RULE TF-06: NATIVE FUNCTION CALLS
+    Native functions (builtins and graphics) are registered with
+    full type signatures and checked like user-defined functions.
+    Calling an unknown identifier (not declared, not native): TYPE ERROR.
+
+================================================================================
+  SECTION 7 — I/O STATEMENTS
+================================================================================
+
+  RULE TIO-01: WRITE STATEMENT
+    All arguments to KW_WRITE must be primitive types or TY_STRING.
+    Passing a TY_STRUCT or TY_ARRAY directly to KW_WRITE is a TYPE ERROR.
+    Use a loop or a custom method to print complex types.
+
+  RULE TIO-02: READ STATEMENT
+    The lvalue argument must be a primitive type (INT, REAL, STRING, CHAR,
+    BOOL).
+    Reading into a TY_STRUCT or TY_ARRAY is a TYPE ERROR.
+
+================================================================================
+  SECTION 8 — FILE AND NETWORK TYPES
+================================================================================
+
+  RULE TFIO-01: FILE TYPE
+    TY_FILE variables must be initialized via KW_FILE_OPEN before use.
+    Using an uninitialized TY_FILE (value is TY_NULL) is a TYPE WARNING.
+    After KW_FILE_CLOSE, accessing the variable is a TYPE WARNING.
+
+  RULE TFIO-02: SOCKET TYPE
+    TY_SOCKET variables must be initialized via KW_NET_CONNECT or
+    KW_NET_LISTEN before use.
+    Using an uninitialized TY_SOCKET (value is TY_NULL) is a TYPE WARNING.
+
+  RULE TFIO-03: FILE/SOCKET NOT IN EXPRESSIONS
+    TY_FILE and TY_SOCKET values may not appear in arithmetic or logical
+    expressions. Only assignment, file/net statement operands, and
+    comparison with KW_NULL are valid uses.
+
+================================================================================
+  SECTION 9 — SCOPE RULES
+================================================================================
+
+  RULE TS-01: SCOPE HIERARCHY
+    Scopes are nested:
+      global scope         (module-level: types, functions, methods, constants)
+        function scope     (parameters + local variables)
+          block scope      (if/while/for bodies — inherits parent scope)
+
+  RULE TS-02: DECLARATION ORDER IN MODULES
+    All type declarations are processed before function signatures.
+    All function signatures are processed before function bodies.
+    This enables forward references to types and functions
+    within the same module.
+
+  RULE TS-03: CROSS-MODULE VISIBILITY
+    Imported module symbols are visible without namespace prefix.
+    Name conflicts between modules: the LAST imported module wins,
+    with a WARNING emitted for the conflict.
+    Future: explicit module-qualified access (module.symbol).
+
+  RULE TS-04: IDENTIFIER RESOLUTION ORDER
+    1. Current function's local variables and parameters.
+    2. Enclosing function scopes (for nested functions, if added later).
+    3. Module-level constants and global variables.
+    4. Imported module symbols.
+    5. Built-in native functions.
+    Unresolved identifier at all levels: TYPE ERROR.
+
+================================================================================
+  SECTION 10 — WARNINGS (non-fatal, printed but compilation continues)
+================================================================================
+
+  RULE TW-01: UNUSED VARIABLE
+    A declared variable that is never read after assignment.
+
+  RULE TW-02: UNUSED IMPORT
+    A module that is imported but none of its symbols are referenced.
+
+  RULE TW-03: SHADOW WARNING
+    A local variable declaration shadows an outer-scope variable.
+
+  RULE TW-04: DUPLICATE IMPORT
+    The same module is imported more than once.
+
+  RULE TW-05: IMPORT NAME CONFLICT
+    Two imported modules export a symbol with the same name.
+
+  RULE TW-06: STATICALLY KNOWN OOB ACCESS
+    An array access with a literal index outside the declared bounds.
+
+  RULE TW-07: UNINITIALIZED FILE/SOCKET USE
+    A FILE or SOCKET variable is used before being opened/connected.
+
+  RULE TW-08: UNREACHABLE CODE
+    Statements following a return statement in the same block.
+
+  RULE TW-09: ZERO STEP IN FOR LOOP
+    A step expression that evaluates to a compile-time-known zero.
+
+================================================================================
+  SECTION 11 — TWO-PASS TYPE CHECKING FOR MULTI-FILE
+================================================================================
+
+  PASS 1 — SIGNATURE COLLECTION (per module, in topological order):
+    - Register all struct type definitions.
+    - Register all function and method signatures
+      (name, parameter types, return type).
+    - Register all constants with their types.
+    - Do NOT type-check any function/method body yet.
+
+  PASS 2 — BODY VERIFICATION (per module, in topological order):
+    - Type-check each function body using the fully-populated symbol table.
+    - Type-check each method body.
+    - All cross-module references are now resolvable because PASS 1
+      has already collected all signatures.
+
+  This two-pass design guarantees:
+    - Mutual recursion between functions is supported.
+    - Forward calls (calling a function declared later in the file) work.
+    - Cross-module function calls are always resolved.
+
+================================================================================
+  SECTION 12 — TYPE CHECKER ERROR PRIORITY
+================================================================================
+
+  When multiple errors appear on the same node, report in this order:
+    1. Undefined identifier (most fundamental — nothing else can be resolved)
+    2. Wrong type in assignment
+    3. Wrong argument type in function call
+    4. Wrong argument count in function call
+    5. Missing return statement
+    6. Condition not boolean
+    7. Operator type mismatch
+    8. Invalid lvalue
+    9. Invalid cast
+    10. Warnings (always last)
+
+================================================================================
+  END OF TYPE CHECKER RULES
+================================================================================
