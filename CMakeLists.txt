@@ -1,36 +1,20 @@
-# ==============================================================================
-# AlgLang — Root CMakeLists.txt
-# Requires CMake >= 3.25 for full C11 + FetchContent + presets support
-# ==============================================================================
-
 cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
 
-# ------------------------------------------------------------------------------
-# Version (also read by AlgLangVersion.cmake for git-tag versioning)
-# ------------------------------------------------------------------------------
 project(
     alglang
     VERSION      0.1.0
     DESCRIPTION  "Human-language-agnostic algorithm language compiler and VM"
-    HOMEPAGE_URL "https://github.com/yourorg/alglang"
+    HOMEPAGE_URL "https://github.com:nkonondememiguel3-droid/AalgLang.git"
     LANGUAGES    C
 )
 
-# ------------------------------------------------------------------------------
-# CMake module path
-# ------------------------------------------------------------------------------
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-# ------------------------------------------------------------------------------
-# Global standards — enforced, not merely requested
-# ------------------------------------------------------------------------------
 set(CMAKE_C_STANDARD            11)
 set(CMAKE_C_STANDARD_REQUIRED   ON)
-set(CMAKE_C_EXTENSIONS          OFF)   # -std=c11, NOT -std=gnu11
+set(CMAKE_C_EXTENSIONS          OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# ------------------------------------------------------------------------------
-# Build type default
-# ------------------------------------------------------------------------------
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(STATUS "[alglang] No build type specified — defaulting to Debug")
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type" FORCE)
@@ -38,20 +22,14 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
         "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
 endif()
 
-# ------------------------------------------------------------------------------
-# Output directories (keeps build tree clean)
-# ------------------------------------------------------------------------------
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 
-# ------------------------------------------------------------------------------
-# User-facing options
-# ------------------------------------------------------------------------------
-option(ALGLANG_BUILD_TESTS      "Build the Criterion test suite"          ON)
-option(ALGLANG_BUILD_TOOLS      "Build developer tools (disassembler...)" ON)
-option(ALGLANG_BUILD_GRAPHICS   "Build the raylib graphics module"        ON)
-option(ALGLANG_BUILD_NETWORK    "Build the network stdlib module"         ON)
+option(ALGLANG_BUILD_TESTS      "Build the Criterion test suite"          OFF)
+option(ALGLANG_BUILD_TOOLS      "Build developer tools (disassembler...)" OFF)
+option(ALGLANG_BUILD_GRAPHICS   "Build the raylib graphics module"        OFF)
+option(ALGLANG_BUILD_NETWORK    "Build the network stdlib module"         OFF)
 option(ALGLANG_ENABLE_ASAN      "Enable AddressSanitizer"                 OFF)
 option(ALGLANG_ENABLE_UBSAN     "Enable UndefinedBehaviorSanitizer"       OFF)
 option(ALGLANG_ENABLE_TSAN      "Enable ThreadSanitizer"                  OFF)
@@ -59,17 +37,6 @@ option(ALGLANG_ENABLE_COVERAGE  "Enable code coverage instrumentation"    OFF)
 option(ALGLANG_WARNINGS_AS_ERRORS "Treat all compiler warnings as errors" OFF)
 option(ALGLANG_USE_LTO          "Enable Link-Time Optimization"           OFF)
 
-# ------------------------------------------------------------------------------
-# Include helper modules
-# ------------------------------------------------------------------------------
-include(cmake/CompilerWarnings.cmake)
-include(cmake/Sanitizers.cmake)
-include(cmake/Coverage.cmake)
-include(cmake/Dependencies.cmake)
-
-# ------------------------------------------------------------------------------
-# LTO (Release builds only)
-# ------------------------------------------------------------------------------
 if(ALGLANG_USE_LTO)
     include(CheckIPOSupported)
     check_ipo_supported(RESULT _ipo_supported OUTPUT _ipo_output)
@@ -81,18 +48,6 @@ if(ALGLANG_USE_LTO)
     endif()
 endif()
 
-# ------------------------------------------------------------------------------
-# Version header (generated from project VERSION)
-# ------------------------------------------------------------------------------
-configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.h.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/include/alglang/version.h"
-    @ONLY
-)
-
-# ==============================================================================
-# INTERFACE library: compiler flags shared across all targets
-# ==============================================================================
 add_library(alglang_compile_options INTERFACE)
 
 target_compile_options(alglang_compile_options INTERFACE
@@ -146,153 +101,116 @@ if(ALGLANG_WARNINGS_AS_ERRORS)
     )
 endif()
 
-target_compile_definitions(alglang_compile_options INTERFACE
-    ALGLANG_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
-    ALGLANG_VERSION_MINOR=${PROJECT_VERSION_MINOR}
-    ALGLANG_VERSION_PATCH=${PROJECT_VERSION_PATCH}
-    $<$<BOOL:${ALGLANG_BUILD_GRAPHICS}>: ALGLANG_GRAPHICS_ENABLED>
-    $<$<BOOL:${ALGLANG_BUILD_NETWORK}>:  ALGLANG_NETWORK_ENABLED>
-    # POSIX feature macros (needed for file/net APIs on Linux/macOS)
-    $<$<NOT:$<C_COMPILER_ID:MSVC>>: _POSIX_C_SOURCE=200809L _XOPEN_SOURCE=700>
-)
+# target_compile_definitions(alglang_compile_options INTERFACE
+#     ALGLANG_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+#     ALGLANG_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+#     ALGLANG_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+#     $<$<BOOL:${ALGLANG_BUILD_GRAPHICS}>: ALGLANG_GRAPHICS_ENABLED>
+#     $<$<BOOL:${ALGLANG_BUILD_NETWORK}>:  ALGLANG_NETWORK_ENABLED>
+#     # POSIX feature macros (needed for file/net APIs on Linux/macOS)
+#     $<$<NOT:$<C_COMPILER_ID:MSVC>>: _POSIX_C_SOURCE=200809L _XOPEN_SOURCE=700>
+# )
 
-# ==============================================================================
-# SUBDIRECTORIES
-# ==============================================================================
+# # subdirectories
+# add_subdirectory(src/i18n)
+# add_subdirectory(src/diagnostics)
+# add_subdirectory(src/runtime)
+# add_subdirectory(src/core)
+# add_subdirectory(src/builtins)
 
-add_subdirectory(src/i18n)
-add_subdirectory(src/diagnostics)
-add_subdirectory(src/runtime)
-add_subdirectory(src/core)
-add_subdirectory(src/builtins)
+# if(ALGLANG_BUILD_GRAPHICS)
+#     add_subdirectory(src/graphics)
+# endif()
 
-if(ALGLANG_BUILD_GRAPHICS)
-    add_subdirectory(src/graphics)
-endif()
+# # core
+# add_library(alglang_core STATIC)
 
-# ------------------------------------------------------------------------------
-# alglang_core — static library bundling everything except main.c
-# ------------------------------------------------------------------------------
-add_library(alglang_core STATIC)
+# target_link_libraries(alglang_core
+#     PUBLIC
+#         alglang_compile_options
+#     PRIVATE
+#         alglang_i18n
+#         alglang_diagnostics
+#         alglang_runtime
+#         alglang_pipeline
+#         alglang_builtins
+#         $<$<BOOL:${ALGLANG_BUILD_GRAPHICS}>: alglang_graphics>
+#         $<$<BOOL:${ALGLANG_BUILD_NETWORK}>:  ${ALGLANG_NET_LIBS}>
+#         m
+# )
 
-target_link_libraries(alglang_core
-    PUBLIC
-        alglang_compile_options
-    PRIVATE
-        alglang_i18n
-        alglang_diagnostics
-        alglang_runtime
-        alglang_pipeline        # core/ pipeline
-        alglang_builtins
-        $<$<BOOL:${ALGLANG_BUILD_GRAPHICS}>: alglang_graphics>
-        $<$<BOOL:${ALGLANG_BUILD_NETWORK}>:  ${ALGLANG_NET_LIBS}>
-        m                       # libm (math functions)
-)
+# target_include_directories(alglang_core
+#     PUBLIC
+#         "${CMAKE_CURRENT_SOURCE_DIR}/include"
+#         "${CMAKE_CURRENT_BINARY_DIR}/include"
+#     PRIVATE
+#         "${CMAKE_CURRENT_SOURCE_DIR}/src"
+# )
 
-target_include_directories(alglang_core
-    PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/include"
-        "${CMAKE_CURRENT_BINARY_DIR}/include"
-    PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/src"
-)
+# # Apply sanitizers and coverage to the core library
+# alglang_apply_sanitizers(alglang_core)
+# alglang_apply_coverage(alglang_core)
 
-# Apply sanitizers and coverage to the core library
-alglang_apply_sanitizers(alglang_core)
-alglang_apply_coverage(alglang_core)
-
-# ------------------------------------------------------------------------------
 # Main executable
-# ------------------------------------------------------------------------------
-add_executable(alglang src/main.c)
+# add_executable(alglang src/main.c)
+add_executable(${PROJECT_NAME} src/main.c)
 
-target_link_libraries(alglang
-    PRIVATE
-        alglang_core
-        alglang_compile_options
-)
+# target_link_libraries(${PROJECT_NAME}
+#     PRIVATE
+#         alglang_core
+#         alglang_compile_options
+# )
 
-target_include_directories(alglang
-    PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/src"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include"
-        "${CMAKE_CURRENT_BINARY_DIR}/include"
-)
+# target_include_directories(alglang
+#     PRIVATE
+#         "${CMAKE_CURRENT_SOURCE_DIR}/src"
+#         "${CMAKE_CURRENT_SOURCE_DIR}/include"
+#         "${CMAKE_CURRENT_BINARY_DIR}/include"
+# )
 
-alglang_apply_sanitizers(alglang)
+# alglang_apply_sanitizers(alglang)
 
-# Strip Release binary on Linux/macOS
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    if(UNIX)
-        add_custom_command(TARGET alglang POST_BUILD
-            COMMAND ${CMAKE_STRIP} $<TARGET_FILE:alglang>
-            COMMENT "Stripping release binary"
-        )
-    endif()
-endif()
+# # Strip Release binary on Linux/macOS
+# if(CMAKE_BUILD_TYPE STREQUAL "Release")
+#     if(UNIX)
+#         add_custom_command(TARGET alglang POST_BUILD
+#             COMMAND ${CMAKE_STRIP} $<TARGET_FILE:alglang>
+#             COMMENT "Stripping release binary"
+#         )
+#     endif()
+# endif()
 
-# ------------------------------------------------------------------------------
-# Developer tools
-# ------------------------------------------------------------------------------
-if(ALGLANG_BUILD_TOOLS)
-    add_subdirectory(tools/alglang-dis)
-    add_subdirectory(tools/gen_lang_template)
-endif()
+# # tools
+# if(ALGLANG_BUILD_TOOLS)
+#     add_subdirectory(tools/alglang-dis)
+#     add_subdirectory(tools/gen_lang_template)
+# endif()
 
-# ------------------------------------------------------------------------------
-# Tests
-# ------------------------------------------------------------------------------
-if(ALGLANG_BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(tests)
-endif()
+# # tests
+# if(ALGLANG_BUILD_TESTS)
+#     enable_testing()
+#     add_subdirectory(tests)
+# endif()
 
-# ==============================================================================
-# INSTALLATION RULES
-# ==============================================================================
-include(GNUInstallDirs)
+# include(GNUInstallDirs)
 
-install(TARGETS alglang
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
+# install(TARGETS alglang
+#     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+# )
 
-install(TARGETS alglang_core
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-)
+# install(TARGETS alglang_core
+#     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+# )
 
-install(DIRECTORY include/alglang
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
+# install(DIRECTORY include/alglang
+#     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+# )
 
-install(DIRECTORY languages/
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/alglang/languages
-)
+# install(DIRECTORY languages/
+#     DESTINATION ${CMAKE_INSTALL_DATADIR}/alglang/languages
+# )
 
-install(DIRECTORY stdlib/
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/alglang/stdlib
-)
+# install(DIRECTORY stdlib/
+#     DESTINATION ${CMAKE_INSTALL_DATADIR}/alglang/stdlib
+# )
 
-# ==============================================================================
-# SUMMARY
-# ==============================================================================
-message(STATUS "")
-message(STATUS "╔══════════════════════════════════════╗")
-message(STATUS "║        AlgLang Build Summary         ║")
-message(STATUS "╠══════════════════════════════════════╣")
-message(STATUS "║  Version     : ${PROJECT_VERSION}")
-message(STATUS "║  Build type  : ${CMAKE_BUILD_TYPE}")
-message(STATUS "║  C standard  : C${CMAKE_C_STANDARD}")
-message(STATUS "║  Compiler    : ${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}")
-message(STATUS "║  Install     : ${CMAKE_INSTALL_PREFIX}")
-message(STATUS "╠══════════════════════════════════════╣")
-message(STATUS "║  Graphics    : ${ALGLANG_BUILD_GRAPHICS}")
-message(STATUS "║  Network     : ${ALGLANG_BUILD_NETWORK}")
-message(STATUS "║  Tests       : ${ALGLANG_BUILD_TESTS}")
-message(STATUS "║  Tools       : ${ALGLANG_BUILD_TOOLS}")
-message(STATUS "║  ASAN        : ${ALGLANG_ENABLE_ASAN}")
-message(STATUS "║  UBSAN       : ${ALGLANG_ENABLE_UBSAN}")
-message(STATUS "║  Coverage    : ${ALGLANG_ENABLE_COVERAGE}")
-message(STATUS "║  LTO         : ${ALGLANG_USE_LTO}")
-message(STATUS "║  Werror      : ${ALGLANG_WARNINGS_AS_ERRORS}")
-message(STATUS "╚══════════════════════════════════════╝")
-message(STATUS "")
