@@ -1,0 +1,76 @@
+# fr.lang
+[meta]
+name        = Français
+version     = 1.0
+decimal_sep = ,
+
+[keywords]
+KW_IF        = si
+KW_THEN      = alors
+KW_ELSE      = sinon
+KW_ELSEIF    = sinon si
+KW_ENDIF     = finsi
+KW_WHILE     = tant_que
+KW_DO        = faire
+KW_ENDWHILE  = fintantque
+KW_REPEAT    = repeter
+KW_UNTIL     = jusqu_a
+KW_FOR       = pour
+KW_ENDFOR    = finpour
+KW_STEP      = pas
+KW_BEGIN     = Debut
+KW_END       = Fin
+KW_RETURN    = retourne
+KW_AND       = et
+KW_OR        = ou
+KW_NOT       = non
+KW_TRUE      = vrai
+KW_FALSE     = faux
+KW_NULL      = nil
+KW_IF        = si
+KW_WRITE     = ecrire
+KW_READ      = lire
+KW_FUNCTION  = Fonction
+KW_ENDFUNCTION = FinFonction
+KW_METHOD    = Methode
+KW_ENDMETHOD = FinMethode
+KW_VAR       = Variables
+KW_CONST     = Constante
+KW_TYPE      = Type
+KW_STRUCT    = Structure
+KW_ENDSTRUCT = FinStruct
+KW_ALGO      = Algorithme
+KW_ARRAY     = tableau
+KW_OF        = de
+KW_INT       = entier
+KW_REAL      = reel
+KW_STRING    = chaine_charactere
+KW_CHAR      = caractere
+KW_BOOL      = booleen
+KW_NUMBER    = nombre
+
+[graphics]
+# Graphics functions are also localizable
+GFX_INIT_WINDOW   = init_fenetre
+GFX_CLOSE_WINDOW  = fermer_fenetre
+GFX_DRAW_CIRCLE   = dessiner_cercle
+GFX_DRAW_RECT     = dessiner_rectangle
+GFX_DRAW_LINE     = dessiner_ligne
+GFX_CLEAR         = effacer
+GFX_BEGIN_DRAW    = debut_dessin
+GFX_END_DRAW      = fin_dessin
+GFX_SHOULD_CLOSE  = fenetre_fermee
+GFX_SET_FPS       = definir_fps
+GFX_KEY_PRESSED   = touche_pressee
+GFX_COLOR_RED     = rouge
+GFX_COLOR_BLUE    = bleu
+GFX_COLOR_GREEN   = vert
+GFX_COLOR_WHITE   = blanc
+GFX_COLOR_BLACK   = noir
+
+[errors]
+# Localized error messages
+ERR_UNEXPECTED_TOKEN = Jeton inattendu '%s' à la ligne %d
+ERR_UNDEFINED_VAR    = Variable '%s' non définie
+ERR_TYPE_MISMATCH    = Type incompatible: attendu '%s', reçu '%s'
+ERR_MISSING_RETURN   = La fonction '%s' doit retourner une valeur
