@@ -153,7 +153,13 @@ endif()
 
 # Main executable
 # add_executable(alglang src/main.c)
-add_executable(${PROJECT_NAME} src/main.c)
+add_executable(${PROJECT_NAME}
+    src/main.c
+    src/alglex.c
+    src/alglex.h
+    src/algtype.c
+    src/algtype.h
+)
 
 # target_link_libraries(${PROJECT_NAME}
 #     PRIVATE
