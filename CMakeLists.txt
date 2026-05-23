@@ -101,122 +101,19 @@ if(ALGLANG_WARNINGS_AS_ERRORS)
     )
 endif()
 
-# target_compile_definitions(alglang_compile_options INTERFACE
-#     ALGLANG_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
-#     ALGLANG_VERSION_MINOR=${PROJECT_VERSION_MINOR}
-#     ALGLANG_VERSION_PATCH=${PROJECT_VERSION_PATCH}
-#     $<$<BOOL:${ALGLANG_BUILD_GRAPHICS}>: ALGLANG_GRAPHICS_ENABLED>
-#     $<$<BOOL:${ALGLANG_BUILD_NETWORK}>:  ALGLANG_NETWORK_ENABLED>
-#     # POSIX feature macros (needed for file/net APIs on Linux/macOS)
-#     $<$<NOT:$<C_COMPILER_ID:MSVC>>: _POSIX_C_SOURCE=200809L _XOPEN_SOURCE=700>
-# )
+# getline library
+add_library(getline SHARED getline.c)
+target_include_directories(getline PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-# # subdirectories
-# add_subdirectory(src/i18n)
-# add_subdirectory(src/diagnostics)
-# add_subdirectory(src/runtime)
-# add_subdirectory(src/core)
-# add_subdirectory(src/builtins)
-
-# if(ALGLANG_BUILD_GRAPHICS)
-#     add_subdirectory(src/graphics)
-# endif()
-
-# # core
-# add_library(alglang_core STATIC)
-
-# target_link_libraries(alglang_core
-#     PUBLIC
-#         alglang_compile_options
-#     PRIVATE
-#         alglang_i18n
-#         alglang_diagnostics
-#         alglang_runtime
-#         alglang_pipeline
-#         alglang_builtins
-#         $<$<BOOL:${ALGLANG_BUILD_GRAPHICS}>: alglang_graphics>
-#         $<$<BOOL:${ALGLANG_BUILD_NETWORK}>:  ${ALGLANG_NET_LIBS}>
-#         m
-# )
-
-# target_include_directories(alglang_core
-#     PUBLIC
-#         "${CMAKE_CURRENT_SOURCE_DIR}/include"
-#         "${CMAKE_CURRENT_BINARY_DIR}/include"
-#     PRIVATE
-#         "${CMAKE_CURRENT_SOURCE_DIR}/src"
-# )
-
-# # Apply sanitizers and coverage to the core library
-# alglang_apply_sanitizers(alglang_core)
-# alglang_apply_coverage(alglang_core)
-
-# Main executable
-# add_executable(alglang src/main.c)
 add_executable(${PROJECT_NAME}
     src/main.c
-    src/alglex.c
-    src/alglex.h
+    src/algarena.h
+    src/algtoken.h
+    src/alglexer.c
+    src/alglexer.h
     src/algtype.c
     src/algtype.h
 )
 
-# target_link_libraries(${PROJECT_NAME}
-#     PRIVATE
-#         alglang_core
-#         alglang_compile_options
-# )
-
-# target_include_directories(alglang
-#     PRIVATE
-#         "${CMAKE_CURRENT_SOURCE_DIR}/src"
-#         "${CMAKE_CURRENT_SOURCE_DIR}/include"
-#         "${CMAKE_CURRENT_BINARY_DIR}/include"
-# )
-
-# alglang_apply_sanitizers(alglang)
-
-# # Strip Release binary on Linux/macOS
-# if(CMAKE_BUILD_TYPE STREQUAL "Release")
-#     if(UNIX)
-#         add_custom_command(TARGET alglang POST_BUILD
-#             COMMAND ${CMAKE_STRIP} $<TARGET_FILE:alglang>
-#             COMMENT "Stripping release binary"
-#         )
-#     endif()
-# endif()
-
-# # tools
-# if(ALGLANG_BUILD_TOOLS)
-#     add_subdirectory(tools/alglang-dis)
-#     add_subdirectory(tools/gen_lang_template)
-# endif()
-
-# # tests
-# if(ALGLANG_BUILD_TESTS)
-#     enable_testing()
-#     add_subdirectory(tests)
-# endif()
-
-# include(GNUInstallDirs)
-
-# install(TARGETS alglang
-#     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-# )
-
-# install(TARGETS alglang_core
-#     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-# )
-
-# install(DIRECTORY include/alglang
-#     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-# )
-
-# install(DIRECTORY languages/
-#     DESTINATION ${CMAKE_INSTALL_DATADIR}/alglang/languages
-# )
-
-# install(DIRECTORY stdlib/
-#     DESTINATION ${CMAKE_INSTALL_DATADIR}/alglang/stdlib
-# )
+target_link_libraries(${PROJECT_NAME} PRIVATE getline)
 

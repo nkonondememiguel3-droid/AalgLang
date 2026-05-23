@@ -1,3 +1,8 @@
+/**
+ * AUTHOR: NKONO NDEME Miguel
+ * algtype.h - the type define in the algolang language.
+ */
+
 #ifndef alglang_type_h
 #define alglang_type_h
 
@@ -10,19 +15,19 @@ typedef enum {
   VAL_INT,
   VAL_REAL,
   VAL_OBJECT,
-} _value_type_t_;
+} value_type_t;
 
-typedef struct _object_ _object_t_;
+typedef struct _object_ object_t;
 
 typedef struct _value_ {
-  _value_type_t_ type;
+  value_type_t type;
   union {
     bool boolean;
     int64_t integer;
     double real;
-    _object_t_ *object;
+    object_t *object;
   } as;
-} _value_t_;
+} value_t;
 
 // All heap-allocated types share this header
 typedef enum {
@@ -32,26 +37,27 @@ typedef enum {
   OBJ_FUNCTION,
   OBJ_CLOSURE,
   OBJ_NATIVE,
-} _object_type_t_;
+} object_type_t;
 
 typedef struct _object_ {
-  _object_type_t_ type;
-  bool marked;
-  struct _object_ *next;
-} _object_t_;
+  object_type_t type;
+  /* for when implemented garbase collector. */
+  /* bool marked; */
+  /* struct _object_ *next; */
+} object_t;
 
 typedef struct {
-  _object_t_ obj;
+  object_t obj;
   int length;
   int capacity;
   char *chars;
   uint32_t hash;
-} _obj_string_t_;
+} obj_string_t;
 
 typedef struct {
-  _object_t_ obj;
+  object_t obj;
   int length;
-  _value_t_ *elements;
-} _obj_array_t_;
+  value_t *elements;
+} obj_array_t;
 
 #endif // alglang_type_h
