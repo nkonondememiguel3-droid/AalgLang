@@ -1,8 +1,9 @@
+#include <sys/types.h>
+
 #include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/types.h>
 
 #include "algarena.h"
 #include "alglexer.h"
